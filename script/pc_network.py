@@ -2178,3 +2178,30 @@ if __name__ == "__main__":
     #     ax.imshow(npe_ex[:, recon_idcs[i]].reshape(28,28), cmap='Blues', vmin=0, vmax=1)
     #     ax.axis('off')
     # ppe_fig.show()
+
+    # fig 2B - errors
+    # tsim = int(sim_params['sim_time'] / sim_params['dt'])
+    # tisi = int(sim_params['isi_time'] / sim_params['dt'])
+    # plt.close('all')
+    # aa = np.zeros(sim_params['n_epoch'])
+    # bb = np.zeros(sim_params['n_epoch'])
+    # len_epoch = int(tsim + tisi) * int(sim_params['n_class'] * sim_params['n_sample'] / sim_params['batch_size'])
+    # for i in range(sim_params['n_epoch']):
+    #     curr_epoch_ppe = errs['layer_0']['ppe_pyr'][i * len_epoch: (i + 1) * len_epoch]
+    #     curr_epoch_npe = errs['layer_0']['npe_pyr'][i * len_epoch: (i + 1) * len_epoch]
+    #     aa[i] = curr_epoch_ppe[-1]
+    #     bb[i] = curr_epoch_npe[-1]
+    # fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+    # ax.plot(aa, c='red', lw=2.0, label='PE+')
+    # ax.plot(bb, c='blue', lw=2.0, label='PE-')
+    # ax.spines['top'].set_visible(False)
+    # ax.spines['right'].set_visible(False)
+    # ax.spines['left'].set_linewidth(2)
+    # ax.spines['bottom'].set_linewidth(2)
+    # ax.set_xlabel('training iteration', fontsize=20)
+    # ax.set_ylabel('firing rate (a.u.)', fontsize=20)
+    # ax.tick_params(axis='both', which='major', labelsize=20)
+    # fig.legend(labelcolor='linecolor', fontsize=20, edgecolor='white')  # , fancybox=True, shadow=True)
+    # fig.tight_layout()
+    # fig.show()
+    # fig.savefig('/home/kwangjun/PycharmProjects/si_pc/cifar10/figures/fig2_errs.png', dpi=300, bbox_inches='tight')
