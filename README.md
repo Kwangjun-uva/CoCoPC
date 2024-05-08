@@ -4,7 +4,7 @@ Predictive coding (PC) is an influential theory in neuroscience, which gives ris
 <br/> <br/> 
 
 <p align="center">
-  <img src="https://github.com/Kwangjun-uva/CoCo-PC/blob/master/architecture.png" width="400"/>
+  <img src="https://github.com/Kwangjun-uva/CoCoPC/blob/master/architecture.png" width="400"/>
 </p>
 <p align="center">  
   Figure 1. Cortical column model of predictive coding. 
@@ -26,7 +26,7 @@ $$\dot{w}  = −\alpha_w  (r^{PE+,-}_{pyr} + r^{rep}_{pyr})$$
 </p>
 
 <p align="center">
-  <img src="https://github.com/Kwangjun-uva/CoCo-PC/blob/master/recons_animation.gif">
+  <img src="https://github.com/Kwangjun-uva/CoCoPC/blob/master/recons_animation.gif">
 </p>
 <p align="center">  
   Figure 2. Reconstruction of sensory inputs.
@@ -37,7 +37,7 @@ $$\dot{w}  = −\alpha_w  (r^{PE+,-}_{pyr} + r^{rep}_{pyr})$$
 <br/>
 
 <p align="center">
-  <img src="https://github.com/Kwangjun-uva/CoCo-PC/blob/master/full_oscillation.gif" width="500"/>
+  <img src="https://github.com/Kwangjun-uva/CoCoPC/blob/master/full_oscillation.gif" width="500"/>
 </p>
 <p align="center">  
   Figure 3. Emergent oscillatory dynamics.
@@ -48,7 +48,7 @@ $$\dot{w}  = −\alpha_w  (r^{PE+,-}_{pyr} + r^{rep}_{pyr})$$
 <br/>
 
 <p align="center">
-  <img src="https://github.com/Kwangjun-uva/CoCo-PC/blob/master/oddball.png" width="500"/>
+  <img src="https://github.com/Kwangjun-uva/CoCoPC/blob/master/oddball.png" width="500"/>
 </p>
 <p align="center">  
   Figure 4. Oddball paradigm.
@@ -59,7 +59,7 @@ microcircuits and representation microcircuit.
 <br/>
 
 <p align="center">
-  <img src="https://github.com/Kwangjun-uva/CoCo-PC/blob/master/opto.png" width="800"/>
+  <img src="https://github.com/Kwangjun-uva/CoCoPC/blob/master/opto.png" width="800"/>
 </p>
 <p align="center">  
   Figure 5. Optogenetic experiment.
