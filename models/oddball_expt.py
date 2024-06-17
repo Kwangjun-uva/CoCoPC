@@ -1,27 +1,57 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from script.pc_network import oddball_input, test_oddball, pickle_load, generate_input
+from script.pc_network import test_oddball, pickle_load, generate_input
 
 
-def oddball_simulation(sim_type, sim_params, dataset, nrepeat=3, record='all', savefig=False):
+def oddball_input_generator(standard_img, deviant_img, n_seq, dev_loc):
+
+    # create a sequence with a length (n_seq) and a deviant stimulation location (dev_loc)
+    oddball_seq = np.repeat(standard_img[None, ...], n_seq, axis=0)
+    oddball_seq[dev_loc - 1] = deviant_img
+
+    # show the sequence
+    xy_dim = np.sqrt(oddball_seq[0].shape[0]).astype(int)
+    oddball_seq_fig, oddball_seq_axs = plt.subplots(nrows=1, ncols=n_seq)
+    for i, ax in enumerate(oddball_seq_axs.flat):
+        ax.imshow(oddball_seq[i].reshape(xy_dim, xy_dim), cmap='gray')
+        ax.axis('off')
+
+        if i == dev_loc - 1:
+            ax.set_title('deviant')
+        else:
+            ax.set_title('standard')
+
+    oddball_seq_fig.suptitle('Oddball stimulus sequence')
+    oddball_seq_fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    return oddball_seq, oddball_seq_fig
+
+def get_dev_idx(deviant_idx, idcs_list):
+
+    if deviant_idx == None:
+        return np.random.choice(idcs_list, 1, replace=False)[0]
+    else:
+        return deviant_idx
+
+def oddball_simulation(sim_type, sim_params, dataset, dev_idx = None, len_seq=5, loc_deviant = 3, record='all', savefig=False):
     ref_img = dataset['test_x'][0]
     ref_class = dataset['test_y'][0]
 
     if sim_type == 'training_same':
         idx_same_class = np.argwhere(dataset['train_y'] == ref_class).flatten()
-        idx_random = np.random.choice(idx_same_class, 1, replace=False)[0]
+        idx_random = get_dev_idx(deviant_idx=dev_idx, idcs_list=idx_same_class)
         odd_img = dataset['train_x'][idx_random]
     elif sim_type == 'training_different':
         idx_diff_class = np.argwhere(dataset['train_y'] != ref_class).flatten()
-        idx_random = np.random.choice(idx_diff_class, 1, replace=False)[0]
+        idx_random = get_dev_idx(deviant_idx=dev_idx, idcs_list=idx_diff_class)
         odd_img = dataset['train_x'][idx_random]
     elif sim_type == 'test_same':
         idx_same_class = np.argwhere(dataset['test_y'] == ref_class).flatten()
-        idx_random = np.random.choice(idx_same_class, 1, replace=False)[0]
+        idx_random = get_dev_idx(deviant_idx=dev_idx, idcs_list=idx_same_class)
         odd_img = dataset['test_x'][idx_random]
     elif sim_type == 'test_different':
         idx_diff_class = np.argwhere(dataset['test_y'] != ref_class).flatten()
-        idx_random = np.random.choice(idx_diff_class, 1, replace=False)[0]
+        idx_random = get_dev_idx(deviant_idx=dev_idx, idcs_list=idx_diff_class)
         odd_img = dataset['test_x'][idx_random]
     elif sim_type == 'fmnist':
         # fmnist input
@@ -47,7 +77,9 @@ def oddball_simulation(sim_type, sim_params, dataset, nrepeat=3, record='all', s
         ref_img = fmnist_x[idx_random]
 
     # oddball figure
-    oddball_x, odd_fig = oddball_input(ref_img, odd_img, n_repeat=nrepeat)
+    oddball_x, odd_fig = oddball_input_generator(
+        standard_img=ref_img, deviant_img=odd_img, n_seq=len_seq, dev_loc=loc_deviant
+    )
     # oddball_x, odd_fig = oddball_input(odd_img2, odd_img, n_repeat=nrepeat)
 
     # oddball params
@@ -97,7 +129,9 @@ oddball_inputs, oddball_net, oddball_seq, oddball_response = oddball_simulation(
     sim_type='test_different',
     sim_params=sim_params,
     dataset=dataset,
-    nrepeat=5,
+    dev_idx=100,
+    len_seq=5,
+    loc_deviant=2,
     record='all',
     savefig=False
 )
