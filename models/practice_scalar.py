@@ -97,8 +97,8 @@ if __name__ == "__main__":
     # learning params
     lr = {'p': 0.1, 'n': 0.1}#{'p': 1e-4, 'n': 1e-4}
     alpha_w = lr['p'] * 0.0
-    n_epoch = 10
-    plt_idx = 2
+    n_epoch = 1
+    plt_idx = 1
     hebb_window = T_steps - 2 #int(T_steps / 10)  # int(T_steps * 0.5) # T_steps - 2
 
     # output handles
@@ -287,6 +287,8 @@ if __name__ == "__main__":
 
             progress_fig.suptitle(f'learning {epoch_i + 1}/{n_epoch}')
             progress_fig.tight_layout()
+            # plt.savefig('/home/kwangjun/PycharmProjects/si_pc/cifar10/PC_scalar_DeactVIP_all.png', dpi=300,
+            #             bbox_inches='tight')
             progress_fig.show()
 
             plt.subplot(121)
@@ -302,6 +304,7 @@ if __name__ == "__main__":
             plt.ylim([0, 1.5])
             plt.title('nPE')
             plt.suptitle(f'input and pred {epoch_i + 1}/{n_epoch}')
+            # plt.savefig('/home/kwangjun/PycharmProjects/si_pc/cifar10/PC_scalar_DeactVIP.png', dpi=300, bbox_inches='tight')
             plt.show()
 
     # fig, axs = plt.subplots(nrows=2, ncols=2, sharex='all', sharey='all')

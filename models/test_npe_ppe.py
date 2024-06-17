@@ -52,7 +52,7 @@ w_self = 1.0
 
 act_func = 'relu'
 bg_noise = 0.0
-input_noise = 0.0
+input_noise = 0.1
 
 for i in range(T_steps - 1):
     # input to ppe

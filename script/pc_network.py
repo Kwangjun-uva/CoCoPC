@@ -638,6 +638,7 @@ def test_reconstruction(sim_param, weights,
 def run_test(
         sim_param, weights, inputs_x, record='error', bg_exc=0.0, bg_inh=0.0, jit_type='constant', jit_lvl=0.0
 ):
+    # FIX to have sim_params as input
     test_net = network(
         neurons_per_layer=sim_param['net_size'],
         bu_rate=sim_param['bu_rate'], td_rate=sim_param['td_rate'],
@@ -709,6 +710,8 @@ class network(object):
             self.initialize_weights(weights=pretrained_weights, jitter_type=jitter_type, jitter_lvl=jitter_lvl)
         else:
             self.initialize_ind_weights(weights=pretrained_weights)
+
+        self.noise = False
 
     def generate_np_weights(self, jitter_lvl, jitter_type, target_shape, layer='curr'):
 
@@ -905,7 +908,8 @@ class network(object):
         else:
             raise ValueError('not supported')
 
-        new_r = r + (-r + fx + bg) * (self.resolution / tau)
+        new_r = r + (-r + fx + np.random.normal(loc=0.0, scale=bg, size=fx.shape)) * (self.resolution / tau)
+        # new_r = r + (-r + fx + bg) * (self.resolution / tau)
 
         if silence:
             return np.zeros(new_r.shape)
@@ -990,6 +994,7 @@ class network(object):
                                 self.np_weights[layer]['e, r'] * self.network[layer]['rep_e'] -
                                 self.np_weights[layer]['i, e'] * self.network[layer]['rep_i'] +
                                 self.network[layer]['rep_r']
+                                # + self.noise * np.random.normal(loc=0, scale=self.bg_exc, size=self.network[layer]['rep_r'].shape)
                         ),
                         ei_type='exc',
                         silence=(layer, 'rep_r') in self.silence_target
@@ -1009,6 +1014,7 @@ class network(object):
                             self.np_weights[layer]['pv, pyr'] * self.network[layer]['ppe_pv'] -
                             self.np_weights[layer]['sst, pyr'] * self.network[layer]['ppe_sst'] +
                             self.np_weights[layer]['pyr, pyr'] * self.network[layer]['ppe_pyr']
+                            # + self.noise * np.random.normal(loc=0, scale=self.bg_exc, size=self.network[layer]['ppe_pyr'].shape)
                     ),
                     ei_type='exc',
                     silence=(layer, 'ppe_pyr') in self.silence_target
@@ -1055,6 +1061,7 @@ class network(object):
                             self.np_weights[layer]['pyr, pyr'] * self.network[layer]['npe_pyr'] -
                             self.np_weights[layer]['pv, pyr'] * self.network[layer]['npe_pv'] -
                             self.np_weights[layer]['sst, pyr'] * self.network[layer]['npe_sst']
+                            # + self.noise * np.random.normal(loc=0, scale=self.bg_exc, size=self.network[layer]['npe_pyr'].shape)
                     ),
                     ei_type='exc',
                     silence=(layer, 'npe_pyr') in self.silence_target
@@ -1312,6 +1319,9 @@ class network(object):
                 )
         if record is not None:
             self.record(record)
+
+    def add_noise(self):
+        self.noise = True
 
     def get_error(self):
 
@@ -1759,7 +1769,7 @@ def save_model(save_path, dataset, params, weights):
 if __name__ == "__main__":
 
     project_dir = '/home/kwangjun/PycharmProjects/si_pc/'
-    model_dir = project_dir + 'cifar10/trial05/'
+    model_dir = project_dir + 'cifar10/tau_2ms/'
     if os.path.exists(model_dir):
         pass
     else:
@@ -1771,13 +1781,13 @@ if __name__ == "__main__":
         'dataset': 'gray_cifar-10',
         'n_class': 10,
         'n_sample': 256,
-        'sim_time': 2.0,
+        'sim_time': 1.0,
         'isi_time': 0.01,
         'dt': 1e-3,
         'max_fr': 1.0,
         'batch_size': 64,
-        'tau_exc': 0.02,
-        'tau_inh': 0.02,
+        'tau_exc': 0.002,
+        'tau_inh': 0.002,
         'bu_rate': 1,  # 1e-2,
         'td_rate': 1,  # 1e-2,
         'symmetric_weight': True,

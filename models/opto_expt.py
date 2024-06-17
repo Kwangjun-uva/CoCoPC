@@ -41,12 +41,12 @@ def test_opto(
     opto_network.initialize_error()
 
     # isi
-    for t_step in trange(t_isi):
+    for _ in trange(t_isi):
         computor(inputs=np.zeros(img_data.T.shape), record=record_var)
 
     # rep_save = np.zeros((*opto_network.network['layer_1']['rep_r'].shape, t_sim))
     # stimulus presentation
-    for t_step in trange(t_sim):
+    for _ in trange(t_sim):
         computor(inputs=img_data.T, record=record_var)
         # rep_save += model.network['layer_1']['rep_r']
         # rep_save[:, :, t_step] = opto_network.network['layer_1']['rep_r']
@@ -171,7 +171,7 @@ def test_opto(
 
 
 projet_dir = '/home/kwangjun/PycharmProjects/si_pc/'
-model_dir = projet_dir + 'cifar10/trial03/'
+model_dir = projet_dir + 'cifar10/trial05/'
 # model_dir = projet_dir + 'fmnist/trial01/'
 
 dataset = pickle_load(model_dir, 'dataset.pkl')
@@ -203,7 +203,7 @@ fig_save_dir = model_dir + 'opto/'
 
 # work on rep pop response!
 
-target_neuron_type = 'none'
+target_neuron_type = 'pv'
 if target_neuron_type == 'none':
     ppe_target = None
     npe_target = None

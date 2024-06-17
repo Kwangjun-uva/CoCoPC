@@ -2,9 +2,9 @@ import pickle5 as pickle
 import numpy as np
 from script.pc_network import test_noise
 
-# model_dir = '/home/kwangjun/PycharmProjects/si_pc/cifar10/trial03/'
+model_dir = '/home/kwangjun/PycharmProjects/si_pc/cifar10/trial03/'
 # model_dir = '/home/kwangjun/PycharmProjects/si_pc/fmnist/trial01/'
-model_dir = '/home/kwangjun/PycharmProjects/si_pc/mnist/trial01/'
+# model_dir = '/home/kwangjun/PycharmProjects/si_pc/mnist/trial01/'
 
 with open(model_dir + 'sim_params.pkl', 'rb') as f:
     sim_params = pickle.load(f)
