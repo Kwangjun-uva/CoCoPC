@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import trange
 from parameters import tau_exc, tau_inh, dt, bg_exc, bg_inh
-from tools import jorge, sigmoid, ReLu
+from script.tools import jorge, sigmoid, ReLu
 
 def dr(r, inputs, func='relu', ei_type='inh'):
     if ei_type == 'exc':

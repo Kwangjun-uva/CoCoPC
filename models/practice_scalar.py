@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import trange
 # from parameters import tau_exc, tau_inh, dt, bg_exc, bg_inh
-from tools import jorge, sigmoid, ReLu
+from script.tools import jorge, sigmoid, ReLu
 
 params_dict = {
 'exc': {'tau_r': 0.02, 'tau_d': 0.02, 'Ibg': 0.0},

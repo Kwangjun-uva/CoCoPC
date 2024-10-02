@@ -4,7 +4,7 @@ import tensorflow as tf
 from tqdm import trange
 from scipy.sparse import random as sprandn
 from scipy.stats import norm
-from tools import jorge, sigmoid, ReLu, sample_imgs, generate_reconstruction_pad
+from script.tools import jorge, sigmoid, ReLu, sample_imgs, generate_reconstruction_pad
 
 def input_modifier(inp, noise, occlude):
     img_dim = tf.sqrt(inp.shape[1]).astype(int)

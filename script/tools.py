@@ -1,6 +1,8 @@
 import numpy as np
-import pickle5 as pickle
+import pickle
+import os
 import matplotlib.pyplot as plt
+from script.params import params_dict
 
 dt = 0.001
 
@@ -17,6 +19,24 @@ def ReLu(x, theta=0):
     new_x = x - theta
 
     return np.maximum(new_x, 0)
+
+
+def dr(r, inputs, func='relu', ei_type='inh', input_noise=0.0, bg_noise=0.0):
+    noisy_input = inputs + np.random.normal(loc=0, scale=input_noise, size=np.array(inputs).shape)
+
+    fx = None
+    if func == 'jorge':
+        fx = jorge(x=noisy_input)
+    elif func == 'sigmoid':
+        fx = sigmoid(x=noisy_input)
+    elif func == 'relu':
+        fx = ReLu(x=noisy_input)
+
+    bg_r = params_dict[ei_type]['Ibg'] + np.random.normal(loc=0, scale=bg_noise, size=np.array(r).shape)
+    decay = -r / params_dict[ei_type]['tau_d']
+    rise = (fx + bg_r) / params_dict[ei_type]['tau_r']
+
+    return r + dt * (decay + rise)
 
 
 def sample_imgs(img_labels, n_class, n_sample, class_choice=None):
@@ -70,7 +90,6 @@ def generate_reconstruction_pad(img_mat, nx=16):
 
 
 def mean_errors(simulation_params, trial_errors, plot_by='epoch'):
-
     ppe = trial_errors['layer_0']['ppe_pyr']
     npe = trial_errors['layer_0']['npe_pyr']
 
@@ -86,14 +105,13 @@ def mean_errors(simulation_params, trial_errors, plot_by='epoch'):
     n_batch_per_epoch = int(n_batch / n_epoch)
     time_per_epoch = n_batch_per_epoch * time_per_batch
 
+    errors = np.zeros((2, n_epoch))
     if plot_by == 'batch':
-        errors = np.zeros((2, n_batch))
         for batch_i in range(n_batch):
             last_error_idx = (batch_i + 1) * time_per_batch
             errors[:, batch_i] = [ppe[last_error_idx - 1], npe[last_error_idx - 1]]
 
     elif plot_by == 'epoch':
-        errors = np.zeros((2, n_epoch))
         for epoch_i in range(n_epoch):
             last_error_idx = (epoch_i + 1) * time_per_epoch
             errors[:, epoch_i] = [ppe[last_error_idx - 1], npe[last_error_idx - 1]]
@@ -114,8 +132,8 @@ def mean_errors(simulation_params, trial_errors, plot_by='epoch'):
 
     return errors, fig
 
-def plot_datset_dist():
 
+def plot_datset_dist():
     import tensorflow as tf
 
     (mnist_images, _), (_, _) = tf.keras.datasets.mnist.load_data()
@@ -126,9 +144,9 @@ def plot_datset_dist():
 
     fig_titles = ['MNIST', 'fashion-MNIST', 'CIFAR-10']
     fig_plots = [mnist_images, fmnist_images, cifar10_images]
-    hist_colors = plt.cm.inferno(np.linspace(0, 1, 20))
+    hist_colors = plt.colormaps.get_cmap('inferno')(np.linspace(0, 1, 20))
 
-    fig, axs = plt.subplots(3, 1, sharex=True, figsize=(5, 5))
+    fig, axs = plt.subplots(nrows=3, ncols=1, sharex='all', figsize=(5, 5))
 
     for i, ax in enumerate(axs):
         ax.hist(fig_plots[i].flatten(), density=True, color=hist_colors[i * 5], alpha=0.75)
@@ -142,3 +160,23 @@ def plot_datset_dist():
     fig.tight_layout()
 
     return fig
+
+
+def load_sim_data(model_path):
+    """
+    :param model_path: directory where trained params (sim_params, weights, dataset) are located
+    :return: simulation parameters, pretrained weights, and dataset used for training and test
+    """
+
+    sim_params = pickle_load(save_path=model_path, file_name='sim_params.pkl')
+    pretrained_weights = pickle_load(save_path=model_path, file_name='weights.pkl')
+    dataset = pickle_load(save_path=model_path, file_name='dataset.pkl')
+
+    return sim_params, pretrained_weights, dataset
+
+
+def create_dir(dir_path):
+    if os.path.exists(dir_path):
+        pass
+    else:
+        os.mkdir(dir_path)

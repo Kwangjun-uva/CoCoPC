@@ -2,27 +2,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tqdm import trange
-# from scipy.sparse import random as sprandn
-# from scipy.stats import norm
 import time
 from skimage.metrics import mean_squared_error as mse
 from skimage.metrics import structural_similarity as ssim
-# import rsatoolbox
 import os
 import datetime
-from tools import jorge, sigmoid, ReLu, sample_imgs, pickle_save, pickle_load, generate_reconstruction_pad
+from script.tools import (jorge, sigmoid, ReLu, sample_imgs, pickle_save,
+                          generate_reconstruction_pad, create_dir)
+
 
 def test_noise(
-        save_dir: str,
         sim_param: dict, pretrained_weights: np.ndarray,
-        noise_levels: list, noise_type: tuple,
+        noise_levels: np.ndarray, noise_type: tuple,
         test_images: np.ndarray, test_sample_idcs: list,
-        layer=0,
-        savefig=True,
-        save_activity=False
-):
+        layer: object = 0
+) -> object:
     """
-    :param save_dir: output directory
     :param sim_param: simulation parameters
     :param pretrained_weights:
     :param noise_levels:
@@ -39,10 +34,20 @@ def test_noise(
     # reconstruction parameters
     n_train_samples, _ = test_images.shape
     n_test_samples = len(test_sample_idcs)
+    img_dim = int(np.sqrt(test_images.shape[1]))
+    input_imgs = test_images[test_sample_idcs].T.reshape(
+        img_dim, img_dim, n_test_samples
+    )
 
     # initialize ssim, mse variables
     ssim_dict = initialize_metric_dict(perturb_lvls=noise_levels)
     mse_dict = initialize_metric_dict(perturb_lvls=noise_levels)
+    img_dict = {
+        'original_img': input_imgs[:, :, 0],
+        'sample_imgs': np.zeros(
+            (len(noise_levels), img_dim, img_dim)
+        )
+    }
 
     for noise_i, noise_val in enumerate(noise_levels):
 
@@ -79,51 +84,35 @@ def test_noise(
             jit_type=sim_jit_dist, jit_lvl=sim_jit_lvl
         )
 
-        # save fig
+        # set title
         noise_recon_fig.suptitle(noise_desc)
-        if savefig:
-            noise_recon_fig.savefig(f'{save_dir}{noise_source}_{int(noise_val * 1000):04d}.png', dpi=300)
-        else:
-            pass
-        noise_recon_fig.show()
 
-        img_dim = int(np.sqrt(test_images.shape[1]))
         recon_imgs = (noise_net.weights['01'].T @ noise_net.network['layer_1']['rep_r']).reshape(
             img_dim, img_dim, n_test_samples)
         noisy_imgs = noise_net.network['layer_0']['rep_e'].reshape(
             img_dim, img_dim, n_test_samples)
-        input_imgs = test_images[test_sample_idcs].T.reshape(
-            img_dim, img_dim, n_test_samples)
+
+        img_dict['sample_imgs'][noise_i] = recon_imgs[:, :, 0]
 
         # calculate ssim and mse
         for i in trange(n_test_samples, desc=f'{noise_i + 1}/{len(noise_levels)}', leave=False):
             # compare clean input vs noise input
             mse_dict['noise'][noise_i] += mse(input_imgs[:, :, i], noisy_imgs[:, :, i])
-            ssim_dict['noise'][noise_i] += ssim(input_imgs[:, :, i], noisy_imgs[:, :, i])
+            ssim_dict['noise'][noise_i] += ssim(input_imgs[:, :, i], noisy_imgs[:, :, i],
+                                                data_range=noisy_imgs[:, :, i].max() - noisy_imgs[:, :, i].min())
 
             # compare clean input vs reconstruction from noisy input
             mse_dict['noise_recon'][noise_i] += mse(input_imgs[:, :, i], recon_imgs[:, :, i])
-            ssim_dict['noise_recon'][noise_i] += ssim(input_imgs[:, :, i], recon_imgs[:, :, i])
+            ssim_dict['noise_recon'][noise_i] += ssim(input_imgs[:, :, i], recon_imgs[:, :, i],
+                                                      data_range=recon_imgs[:, :, i].max() - recon_imgs[:, :, i].min())
 
-    # plot ssim/mse figure
-    metric_fig = plot_metric_fig(
-        ssim_dict=ssim_dict, mse_dict=mse_dict,
-        num_test_samples=n_test_samples,
-        perturb_lvls=noise_levels, perturb_type=noise_dist
-    )
+    mse_dict = {k: v / n_test_samples for k, v in mse_dict.items()}
+    ssim_dict = {k: v / n_test_samples for k, v in ssim_dict.items()}
 
-    if savefig:
-        # metric_fig.suptitle(noise_desc)
-        metric_fig.tight_layout()
-        metric_fig.savefig(save_dir + f'{noise_source}_ssim_mse.png', dpi=300)
-    else:
-        pass
-
-    return noise_recon_fig, noise_net, metric_fig
+    return noise_net, noise_recon_fig, mse_dict, ssim_dict, img_dict
 
 
 def noise_generator(noise_type, noise_lvl, target_shape):
-
     noise_func = {
         'uniform': [np.random.uniform, [-noise_lvl, noise_lvl],
                     r'external noise ~ $\mathcal{U}$' + f' (0, {noise_lvl:.3f})'],
@@ -140,49 +129,25 @@ def return_self(x, size):
     return np.ones(size) * x
 
 
-def initialize_metric_dict(perturb_lvls, dict_keys=['noise', 'noise_recon']):
+def initialize_metric_dict(perturb_lvls, dict_keys=None):
     # initialize ssim, mse variables
+    if dict_keys is None:
+        dict_keys = ['noise', 'noise_recon']
+
     return {key_i: np.zeros(len(perturb_lvls)) for key_i in dict_keys}
 
 
-def plot_metric_fig(ssim_dict, mse_dict, num_test_samples, perturb_lvls, perturb_type):
-
-    # # normalize
-    # for _, vals in ssim_dict.items():
-    #     vals /= num_test_samples
-    #
-    # for _, vals in mse_dict.items():
-    #     vals /= num_test_samples
-
-    plt.close('all')
-    metric_fig, metric_axs = plt.subplots(nrows=2, ncols=1, sharex='all')
-    metric_axs[0].plot(perturb_lvls, ssim_dict['noise'] / num_test_samples, label='Input')
-    metric_axs[0].plot(perturb_lvls, ssim_dict['noise_recon'] / num_test_samples, label='Reconstruction')
-    metric_axs[0].set_ylabel('SSIM')
-    metric_axs[0].spines['top'].set_visible(False)
-    metric_axs[0].spines['right'].set_visible(False)
-    metric_axs[0].legend(loc="best")  # , title='Original vs Additive noise')
-    metric_axs[1].plot(perturb_lvls, mse_dict['noise'] / num_test_samples)
-    metric_axs[1].plot(perturb_lvls, mse_dict['noise_recon'] / num_test_samples)
-    metric_axs[1].set_ylabel('MSE')
-    metric_axs[1].set_xlabel(f'noise level ' + r'$(\sigma)$')
-    metric_axs[1].spines['top'].set_visible(False)
-    metric_axs[1].spines['right'].set_visible(False)
-    metric_fig.suptitle(f'Robustness against {perturb_type} noise')
-
-    return metric_fig
-
 def get_training_test_set(ds_key, num_class, num_sample, class_choice=None, max_fr=30, shuffle=True):
-    dataset = {
+    training_set = {
         'mnist': tf.keras.datasets.mnist,
         'fmnist': tf.keras.datasets.fashion_mnist,
         'gray_cifar-10': tf.keras.datasets.cifar10
     }
 
-    if ds_key not in list(dataset.keys()):
+    if ds_key not in list(training_set.keys()):
         raise ValueError('Please chooose from: mnist, fmnist, gray_cifar-10.')
 
-    (x_train, y_train), (x_test, y_test) = dataset[ds_key].load_data()
+    (x_train, y_train), (x_test, y_test) = training_set[ds_key].load_data()
 
     if ds_key == 'gray_cifar-10':
         x_train = tf.image.rgb_to_grayscale(x_train).numpy()[:, :, :, 0]
@@ -209,7 +174,12 @@ def get_training_test_set(ds_key, num_class, num_sample, class_choice=None, max_
     return data_train, label_train, data_test, label_test
 
 
-def generate_input(input_type, num_class, num_sample, max_fr, class_choice=None, shuffle=False):
+def generate_input(simParams, class_choice=None, shuffle=False):
+    input_type = simParams['dataset']
+    num_class = simParams['n_class']
+    num_sample = simParams['n_sample']
+    max_fr = simParams['max_fr']
+
     x_input, y_input, x_test, y_test = get_training_test_set(
         ds_key=input_type,
         num_class=num_class, num_sample=num_sample,
@@ -244,7 +214,14 @@ def generate_input(input_type, num_class, num_sample, max_fr, class_choice=None,
 
     fig.tight_layout()
 
-    return x_input, y_input, x_test, y_test, fig
+    dataset = {
+        'train_x': x_input,
+        'train_y': y_input,
+        'test_x': x_test,
+        'test_y': y_test
+    }
+
+    return dataset, fig
 
 
 def oddball_input(img1, img2, n_repeat):
@@ -270,10 +247,8 @@ def test_oddball(
         jit_type='constant', jit_lvl=0.0
 ):
     oddball_net = network(
-        neurons_per_layer=sim_params['net_size'],
-        bu_rate=sim_params['bu_rate'], td_rate=sim_params['td_rate'],
-        tau_exc=sim_params['tau_exc'], tau_inh=sim_params['tau_inh'],
-        symm_w=sim_params['symmetric_weight'], pretrained_weights=weights,
+        simParams=sim_params,
+        pretrained_weights=weights,
         bg_exc=bg_exc, bg_inh=bg_inh, jitter_lvl=jit_lvl, jitter_type=jit_type
     )
 
@@ -289,62 +264,22 @@ def test_oddball(
     # reset error
     oddball_net.initialize_error()
 
+    steps_isi = int(sim_params['isi_time'] / sim_params['dt'])
+    steps_sim = int(sim_params['sim_time'] / sim_params['dt'])
+
     for i in trange(n_imgs):
 
         # isi
-        steps_isi = int(sim_params['isi_time'] / sim_params['dt'])
         for t_step in range(steps_isi):
             computor(inputs=np.zeros(oddball_x[i].reshape(-1, 1).shape), record=record)
         # test_net.add_err()
 
         # stimulus presentation
-        steps_isi = int(sim_params['sim_time'] / sim_params['dt'])
-        for t_step in range(steps_isi):
+        for t_step in range(steps_sim):
             computor(inputs=oddball_x[i].reshape(-1, 1), record=record)
-        # test_net.add_err()
-
-        # # output figure
-        # total_t = len(oddball_net.errors['layer_0']['ppe_pyr'])
-        # re_fig = plt.figure()
-        # if record == 'error':
-        #     # error figure
-        #     # re_fig, re_axs = plt.subplots(1, 1, figsize=(10, 3))
-        #     re_axs = re_fig.add_subplot(111)
-        #     re_axs.plot(oddball_net.errors['layer_0']['ppe_pyr'], label='PE+')
-        #     re_axs.plot(oddball_net.errors['layer_0']['npe_pyr'], label='PE-')
-        #     for yi in np.arange(0, total_t, t_sim + t_isi):
-        #         re_axs.axvline(x=yi, ls='--', c='black')
-        #         re_axs.axvline(x=yi + t_isi, ls='--', c='black')
-        #     re_axs.spines['top'].set_visible(False)
-        #     re_axs.spines['right'].set_visible(False)
-        #     re_axs.set_xlabel('time (ms)')
-        #     re_axs.set_ylabel('Firing rate (Hz)')
-        #     re_axs.legend(loc='upper right', bbox_to_anchor=(1.1, 1.05))
-        #
-        # elif record == 'all':
-        #     # error + rep figure
-        #     re_fig, re_axs = plt.subplots(3, 1, figsize=(10, 9))
-        #     re_axs[0].plot(oddball_net.errors['layer_1']['rep_r'], label='rep', c='purple')
-        #     re_axs[1].plot(oddball_net.errors['layer_0']['ppe_pyr'], label='PE+', c='r')
-        #     re_axs[2].plot(oddball_net.errors['layer_0']['npe_pyr'], label='PE-', c='b')
-        #     for ax_i, ax in enumerate(re_axs.flat):
-        #         for yi in np.arange(0, total_t, t_sim + t_isi):
-        #             ax.axvline(x=yi, ls='--', c='black')
-        #             ax.axvline(x=yi + t_isi, ls='--', c='black')
-        #         ax.spines['top'].set_visible(False)
-        #         ax.spines['right'].set_visible(False)
-        #         if ax_i == 2:
-        #             ax.set_xlabel('time (ms)')
-        #         else:
-        #             ax.set_xlabel('')
-        #         if ax_i == 1:
-        #             ax.set_ylabel('Firing rate (Hz)')
-        #         else:
-        #             ax.set_ylabel('')
-        #     re_fig.legend(loc='upper right')
 
         # output figure
-        total_t = len(oddball_net.errors['layer_0']['ppe_pyr'])
+        total_t = n_imgs * (steps_isi + steps_sim)
         re_fig = plt.figure()
         if record == 'error':
             # error figure
@@ -370,26 +305,37 @@ def test_oddball(
             for ax_i, ax in enumerate(re_fig.axes):
 
                 if ax_i == 2:
-                    ax.set_xlabel('time (ms)')
+                    ax.set_xlabel('Time (ms)')
                 else:
                     ax.set_xlabel('')
                     ax.set_xticklabels([])
                 if ax_i == 1:
-                    ax.set_ylabel('Firing rate (Hz)')
+                    ax.set_ylabel('Firing rate (a.u.)')
                 else:
                     ax.set_ylabel('')
-            # re_fig.legend(loc='upper right')
-            leg = re_fig.legend(loc='upper right')
-            for h, t in zip(leg.legendHandles, leg.get_texts()):
-                t.set_color(h.get_color())
+
+            # leg = re_fig.legend(loc='upper right')
+            # for h, t in zip(leg.legendHandles, leg.get_texts()):
+            #     t.set_color(h.get_color())
+
+        elif record == 'interneurons':
+
+            in_colors = ['Blues', 'Greens', 'Wistia']
+            for ax_i, (neuron_group, response) in enumerate(oddball_net.errors['layer_0'].items()):
+                axi = re_fig.add_subplot(2, 3, ax_i + 1)
+                axi.plot(response, c=plt.cm.get_cmap(in_colors[ax_i % 3])(0.75), lw=2)
+                axi.set_title(neuron_group)
+                if ax_i < 3:
+                    axi.set_xticklabels([])
+                elif ax_i == 4:
+                    axi.set_xlabel('Time (ms)')
 
         for ax in re_fig.axes:
             create_vlines(
                 target_axes=ax, total_sim_time=total_t,
                 trial_sim_time=int(sim_params['sim_time'] / sim_params['dt']),
                 interval_time=int(sim_params['isi_time'] / sim_params['dt']))
-            remove_top_right_spines(target_axes=ax, target_spines=['top', 'right'])
-
+            remove_top_right_spines(target_axes=ax)
 
     return oddball_net, re_fig
 
@@ -400,7 +346,9 @@ def create_vlines(target_axes, total_sim_time, trial_sim_time, interval_time):
         target_axes.axvline(x=yi + interval_time, ls='--', c='black')
 
 
-def remove_top_right_spines(target_axes, target_spines: list):
+def remove_top_right_spines(target_axes, target_spines=None):
+    if target_spines is None:
+        target_spines = ['top', 'right']
     for spine in target_spines:
         target_axes.spines[spine].set_visible(False)
 
@@ -444,10 +392,7 @@ def infer_from_existing_model(
     show_idx = sim_params['recon_img_idcs']
 
     test_net = network(
-        neurons_per_layer=sim_params['net_size'],
-        bu_rate=sim_params['bu_rate'], td_rate=sim_params['td_rate'],
-        tau_exc=sim_params['tau_exc'], tau_inh=sim_params['tau_inh'],
-        symm_w=sim_params['symmetric_weight'], pretrained_weights=weights,
+        simParams=sim_params, pretrained_weights=weights,
         bg_exc=bg_exc, bg_inh=bg_inh, jitter_lvl=jitter_lvl, jitter_type=jitter_type
     )
 
@@ -581,12 +526,6 @@ def test_reconstruction(sim_param, weights,
                         layer, input_vector, sample_idcs,
                         record='error',
                         bg_exc=0.0, bg_inh=0.0, jit_type='constant', jit_lvl=0.0):
-    # if n_samples % 16 != 0:
-    #     raise ValueError('Pick a number divisible by 16.')
-    # else:
-    #     pass
-
-    # sample_idcs = np.random.choice(np.arange(len(input_vector)), n_samples, replace=False)
 
     # input_vector = (n_sample, n_pixel) -> test_samples = (n_pixel, n_sample)
     test_samples = input_vector[sample_idcs].T
@@ -616,11 +555,11 @@ def test_reconstruction(sim_param, weights,
         _, _, pred_pad = generate_reconstruction_pad(img_mat=pred_fr, nx=nx)
 
         recon_fig, recon_axs = plt.subplots(nrows=1, ncols=2, sharex='all', sharey='all')
-                                            # figsize=(int(len(sample_idcs / nx) * 2), nx))
-        input_imgs = recon_axs[0].imshow(input_pad, cmap='gray')
+        # figsize=(int(len(sample_idcs / nx) * 2), nx))
+        input_imgs = recon_axs[0].imshow(input_pad, cmap='gray', vmin=0.0, vmax=1.0)
         recon_fig.colorbar(input_imgs, ax=recon_axs[0], shrink=0.4)
         recon_axs[0].set_title('input')
-        pred_imgs = recon_axs[1].imshow(pred_pad, cmap='gray')
+        pred_imgs = recon_axs[1].imshow(pred_pad, cmap='gray', vmin=0.0, vmax=1.0)
         recon_fig.colorbar(pred_imgs, ax=recon_axs[1], shrink=0.4)
         recon_axs[1].set_title('prediction')
         for ax in recon_axs.flatten():
@@ -640,10 +579,7 @@ def run_test(
 ):
     # FIX to have sim_params as input
     test_net = network(
-        neurons_per_layer=sim_param['net_size'],
-        bu_rate=sim_param['bu_rate'], td_rate=sim_param['td_rate'],
-        tau_exc=sim_param['tau_exc'], tau_inh=sim_param['tau_inh'],
-        symm_w=sim_param['symmetric_weight'], pretrained_weights=weights,
+        simParams=sim_param, pretrained_weights=weights,
         bg_exc=bg_exc, bg_inh=bg_inh, jitter_lvl=jit_lvl, jitter_type=jit_type
     )
 
@@ -680,25 +616,24 @@ def run_test(
 class network(object):
 
     def __init__(
-            self, neurons_per_layer, pretrained_weights=None,
-            bu_rate=1.0, td_rate=1.0,
-            tau_exc=20e-3, tau_inh=20e-3,
-            bg_exc=0, bg_inh=0, resolution=1e-3,
-            symm_w=True,
-            jitter_lvl=0.0, jitter_type='constant'
+            self,
+            simParams,
+            pretrained_weights=None,
+            bg_exc=0.0, bg_inh=0.0,
+            jitter_lvl=0.0, jitter_type='constant',
     ):
 
-        self.bu_rate = bu_rate
-        self.td_rate = td_rate
-        self.tau_exc = tau_exc
-        self.tau_inh = tau_inh
+        self.bu_rate = simParams['bu_rate']
+        self.td_rate = simParams['td_rate']
+        self.tau_exc = simParams['tau_exc']
+        self.tau_inh = simParams['tau_inh']
 
         self.bg_exc = bg_exc
         self.bg_inh = bg_inh
 
-        self.resolution = resolution
+        self.resolution = simParams['dt']
 
-        self.net_size = neurons_per_layer
+        self.net_size = simParams['net_size']
 
         self.run_error = {}
         self.weights = {}
@@ -706,7 +641,7 @@ class network(object):
         self.network = {}
         self.silence_target = []
 
-        if symm_w:
+        if simParams['symmetric_weight']:
             self.initialize_weights(weights=pretrained_weights, jitter_type=jitter_type, jitter_lvl=jitter_lvl)
         else:
             self.initialize_ind_weights(weights=pretrained_weights)
@@ -909,7 +844,6 @@ class network(object):
             raise ValueError('not supported')
 
         new_r = r + (-r + fx + np.random.normal(loc=0.0, scale=bg, size=fx.shape)) * (self.resolution / tau)
-        # new_r = r + (-r + fx + bg) * (self.resolution / tau)
 
         if silence:
             return np.zeros(new_r.shape)
@@ -994,7 +928,7 @@ class network(object):
                                 self.np_weights[layer]['e, r'] * self.network[layer]['rep_e'] -
                                 self.np_weights[layer]['i, e'] * self.network[layer]['rep_i'] +
                                 self.network[layer]['rep_r']
-                                # + self.noise * np.random.normal(loc=0, scale=self.bg_exc, size=self.network[layer]['rep_r'].shape)
+                            # + self.noise * np.random.normal(loc=0, scale=self.bg_exc, size=self.network[layer]['rep_r'].shape)
                         ),
                         ei_type='exc',
                         silence=(layer, 'rep_r') in self.silence_target
@@ -1014,7 +948,7 @@ class network(object):
                             self.np_weights[layer]['pv, pyr'] * self.network[layer]['ppe_pv'] -
                             self.np_weights[layer]['sst, pyr'] * self.network[layer]['ppe_sst'] +
                             self.np_weights[layer]['pyr, pyr'] * self.network[layer]['ppe_pyr']
-                            # + self.noise * np.random.normal(loc=0, scale=self.bg_exc, size=self.network[layer]['ppe_pyr'].shape)
+                        # + self.noise * np.random.normal(loc=0, scale=self.bg_exc, size=self.network[layer]['ppe_pyr'].shape)
                     ),
                     ei_type='exc',
                     silence=(layer, 'ppe_pyr') in self.silence_target
@@ -1061,7 +995,7 @@ class network(object):
                             self.np_weights[layer]['pyr, pyr'] * self.network[layer]['npe_pyr'] -
                             self.np_weights[layer]['pv, pyr'] * self.network[layer]['npe_pv'] -
                             self.np_weights[layer]['sst, pyr'] * self.network[layer]['npe_sst']
-                            # + self.noise * np.random.normal(loc=0, scale=self.bg_exc, size=self.network[layer]['npe_pyr'].shape)
+                        # + self.noise * np.random.normal(loc=0, scale=self.bg_exc, size=self.network[layer]['npe_pyr'].shape)
                     ),
                     ei_type='exc',
                     silence=(layer, 'npe_pyr') in self.silence_target
@@ -1349,8 +1283,12 @@ class network(object):
             var_list = ['rep_r']
         elif var == 'all':
             var_list = ['ppe_pyr', 'npe_pyr', 'rep_r']
+        elif var == 'interneurons':
+            pe_circuits = ['ppe', 'npe']
+            neurons = ['pv', 'sst', 'vip']
+            var_list = [f'{pe_i}_{n_i}' for pe_i in pe_circuits for n_i in neurons]
         else:
-            raise ValueError('Please choose either error or rep.')
+            raise ValueError('Please choose valid neuron group (s).')
 
         for layer, neuron_dict in self.errors.items():
             for var in var_list:
@@ -1598,7 +1536,7 @@ class network(object):
         # input, pred, err+, err-
         ncol = 4
         # layers
-        nrow = len(self.network) - 1
+        nrow = len(self.net_size) - 1
 
         # plot
         batch_fig, batch_ax = plt.subplots(
@@ -1766,168 +1704,73 @@ def save_model(save_path, dataset, params, weights):
     pickle_save(save_path, 'weights.pkl', weights)
 
 
-if __name__ == "__main__":
+def run_simulation(simParams, dataset, save=True):
 
-    project_dir = '/home/kwangjun/PycharmProjects/si_pc/'
-    model_dir = project_dir + 'cifar10/tau_2ms/'
-    if os.path.exists(model_dir):
-        pass
-    else:
-        os.mkdir(model_dir)
-
-    dataset = ['mnist', 'fmnist', 'gray_cifar-10']
-    sim_params = {
-        'model_dir': model_dir,
-        'dataset': 'gray_cifar-10',
-        'n_class': 10,
-        'n_sample': 256,
-        'sim_time': 1.0,
-        'isi_time': 0.01,
-        'dt': 1e-3,
-        'max_fr': 1.0,
-        'batch_size': 64,
-        'tau_exc': 0.002,
-        'tau_inh': 0.002,
-        'bu_rate': 1,  # 1e-2,
-        'td_rate': 1,  # 1e-2,
-        'symmetric_weight': True,
-        'n_epoch': 100,
-        'plot_interval': 10,
-        'recon_sample_n': 16,
-        'lr': 1e-2,
-        'w_decay': 1e-4
-    }
-
-    # predictive coding
-    n_class = sim_params['n_class']
-    n_sample = sim_params['n_sample']
-    n_img = n_class * n_sample
-    # input_x = (n_class * n_sample, n_pixel)
-    input_x, input_y, test_x, test_y, input_fig = generate_input(
-        input_type=sim_params['dataset'],
-        num_class=n_class, num_sample=n_sample, max_fr=sim_params['max_fr'], class_choice=None, shuffle=True)
-    input_fig.show()
-
-    model_dataset = {
-        'train_x': input_x,
-        'train_y': input_y,
-        'test_x': test_x,
-        'test_y': test_y
-    }
-
-    # # oddball paradigm
-    # input_x, odd_fig = oddball_input(input_x[0], input_x[1], 3)
-    # odd_fig.show()
-    # n_img = len(input_x)
-
-    #
-    input_size = np.shape(input_x)[1]
-
+    create_dir('../results/')
+    # define input size
+    input_size = dataset['train_x'].shape[1]
+    # define layer size
     net_size = [input_size, 28 ** 2]  # , 12 ** 2]
-    sim_params.update({'net_size': net_size})
+    # update sim parameters
+    simParams.update({'net_size': net_size})
 
-    net = network(
-        neurons_per_layer=sim_params['net_size'],
-        bu_rate=sim_params['bu_rate'], td_rate=sim_params['td_rate'],
-        tau_exc=sim_params['tau_exc'], tau_inh=sim_params['tau_inh'],
-        symm_w=sim_params['symmetric_weight']
-    )
+    # simulation params
+    time_steps = int(simParams['sim_time'] / simParams['dt'])
+    isi_steps = int(simParams['isi_time'] / simParams['dt'])
+    n_batch = simParams['n_class'] * simParams['n_sample'] // simParams['batch_size']
+    n_epoch = simParams['n_epoch']
 
-    # initialize network
-    net.initialize_network(batch_size=sim_params['batch_size'])
-    # reset error
-    net.initialize_error()
-
-    # w_fig, w_axs = plt.subplots(nrows=2, ncols=len(net_size) - 1)
-    # for i, (w_idx, w_mat) in enumerate(net.weights.items()):
-    #     w_axs[0, i].imshow(w_mat, cmap='hot')
-    #     w_axs[0, i].set_title(f'{w_idx} before')
-    #     w_axs[0, i].axis('off')
-
-    # # simulation params
-    time_steps = int(sim_params['sim_time'] / sim_params['dt'])
-    isi_steps = int(sim_params['isi_time'] / sim_params['dt'])
-    n_batch = sim_params['n_class'] * sim_params['n_sample'] // sim_params['batch_size']
-
-    n_epoch = sim_params['n_epoch']
     # plot interval (ms)
-    plot_interval = sim_params['plot_interval']
+    plot_interval = simParams['plot_interval']
     # weight update interval (ms)
     learn_interval = time_steps // 1
-    sim_params.update({'learn_interval': learn_interval})
-    # leranig parameteres
-    lr_init = sim_params['lr']
-    w_decay = sim_params['w_decay']
+    simParams.update({'learn_interval': learn_interval})
 
-    recon_img_idcs = np.random.choice(sim_params['batch_size'], sim_params['recon_sample_n'], replace=False)
-    sim_params.update({'recon_img_idcs': recon_img_idcs})
+    recon_img_idcs = np.random.choice(simParams['batch_size'], simParams['recon_sample_n'], replace=False)
+    simParams.update({'recon_img_idcs': recon_img_idcs})
+
+    # create network
+    net = network(simParams=simParams, pretrained_weights=None)
+    # initialize network
+    net.initialize_network(batch_size=simParams['batch_size'])
+    # initialize mean error log
+    net.initialize_error()
 
     start_time = time.time()
     # for epoch_i in trange(n_epoch, desc='epoch'):
-    # for epoch_i in range(n_epoch):
     for epoch_i in range(n_epoch):
-
-        # if (epoch_i + 1) % 20 == 0:
-        #     lr_init *= 5e-1
 
         # for img_i in range(n_img):
         for batch_i in range(n_batch):
 
             # reset network
-            net.initialize_network(batch_size=sim_params['batch_size'])
-            # # reset error
-            # net.initialize_error()
+            net.initialize_network(batch_size=simParams['batch_size'])
+            # define current batch to feed
+            curr_batch = dataset['train_x'][
+                         batch_i * simParams['batch_size']: (batch_i + 1) * simParams['batch_size']].T
 
-            curr_batch = input_x[batch_i * sim_params['batch_size']: (batch_i + 1) * sim_params['batch_size']].T
-
-            # isi
-            for t in range(isi_steps):
+            # inter-stimulus interval
+            for _ in range(isi_steps):
                 # simulate batch
                 net.compute(inputs=np.zeros(curr_batch.shape))
-                # net.compute_ind(inputs=np.zeros(curr_batch.shape), record=None)
-                # simulate batch with ind weights
-                # net.compute_ind(inputs=np.zeros(curr_batch.shape))
 
-                # # simulate serial / oddball
-                # net.compute(inputs=np.zeros(curr_img.shape))
-
-            # stim presentation
-            for t in trange(time_steps, desc=f'Epoch #{epoch_i + 1}/{n_epoch}, batch #{batch_i + 1}/{n_batch}',
-                            leave=False):  # , desc=f'stimulus {img_i + 1}/{n_img}'):
-
+            # stimulus presentation
+            for _ in trange(
+                    time_steps,
+                    desc=f'Epoch #{epoch_i + 1}/{n_epoch}, batch #{batch_i + 1}/{n_batch}',
+                    leave=False
+            ):
                 # simulate batch
                 net.compute(inputs=curr_batch, record='error')
-                # net.compute_ind(inputs=curr_batch, record='error')
-                # # simulate serial / oddball
-                # curr_img = input_x.T  # input_x[img_i].T
-                # net.compute(inputs=curr_img, bu_rate=0.1, td_rate=0.01)
-
-                # # weight update
-                # if (t + 1) % learn_interval:
-                #     net.learn(lr=lr_init, alpha=w_decay)
-                #     # net.learn_ind(lr=lr_init, alpha=w_decay)
-                # else:
-                #     pass
 
             # weight update
-            net.learn(lr=lr_init, alpha=w_decay)
-
-            # # add run error
-            # net.add_err()
+            net.learn(lr=simParams['lr'], alpha=simParams['w_decay'])
 
             # plot intermediate results
-            # if ((epoch_i + 1) % plot_interval == 0):
             if ((epoch_i == 0) or ((epoch_i + 1) % plot_interval == 0)) and ((batch_i + 1) == n_batch):
-                # plt.close('all')
-                # err_fig = net.plot_error(epoch_i + 1, n_epoch)
-                # err_fig.show()
-
                 plt.close('all')
-                # run_err_fig = net.plot_run_error(epoch_i=epoch_i, tsim=time_steps)
-                # run_err_fig.show()
-                # int_fig = net.plots(epoch_i + 1, n_epoch)
-                int_fig = net.batch_plots(recon_img_idcs, epoch_i + 1, n_epoch)
-                # int_fig = net.batch_plots_ind(epoch_i + 1, n_epoch)
+
+                int_fig = net.batch_plots(recon_img_idcs, epoch_i + 1, simParams['n_epoch'])
                 int_fig.show()
 
                 err_dict, err_plt = error_plot(net, n_batch, epoch_i + 1, time_steps + isi_steps)
@@ -1939,279 +1782,45 @@ if __name__ == "__main__":
     print(f'total simulation time: {total_sim_time}')
 
     # save
-    pickle_save(model_dir, 'weights.pkl', net.weights)
-    pickle_save(model_dir, 'dataset.pkl', model_dataset)
-    pickle_save(model_dir, 'sim_params.pkl', sim_params)
+    if save:
+        # save trained weights
+        pickle_save(simParams['model_dir'], 'weights.pkl', net.weights)
+        # save training and test datasets
+        pickle_save(simParams['model_dir'], 'dataset.pkl', dataset)
+        # save simulation parameters
+        pickle_save(simParams['model_dir'], 'sim_params.pkl', simParams)
+        # save prediction error firing rates across training epochs
+        pickle_save(simParams['model_dir'], 'errors.pkl', net.errors)
+    else:
+        pass
 
-    pickle_save(model_dir, 'errors.pkl', net.errors)
+    return net
 
-    ## for i, (w_idx, w_mat) in enumerate(net.weights.items()):
-    ##     w_axs[1, i].imshow(w_mat, cmap='hot')
-    ##     w_axs[1, i].set_title(f'{w_idx} after')
-    ##     w_axs[1, i].axis('off')
-    ## w_fig.show()
-    #
-    # with open(model_dir + 'weights.pkl', 'rb') as f:
-    #     pretrained_weights = pickle.load(f)
-    # # training reconstruction
-    # recon_img_idcs = np.random.choice(input_x.shape[0], input_x.shape[0] // 4, replace=False)
-    # plt.close('all')
-    # train_recon_fig, train_net, train_rep = test_reconstruction(
-    #     sim_param=sim_params, weights=pretrained_weights,
-    #     layer=0, input_vector=input_x, sample_idcs=recon_img_idcs
-    # )
-    # train_recon_fig.show()
-    # #
-    # # test reconstruction
-    # plt.close('all')
-    # test_recon_fig, test_net, test_rep = test_reconstruction(
-    #     sim_param=sim_params, weights=pretrained_weights,
-    #     layer=0, input_vector=test_x, sample_idcs=recon_img_idcs
-    # )
-    #
-    # # positive error increases. Why?
-    # # why does mse of pe fluctuate?
-    # # fr decreases as you move across the hierarchy, why?
-    #
-    # # occlusion test
-    # rand_n = np.random.choice(np.arange(30), 1, replace=False)
-    # aa = input_x[rand_n].reshape(28, 28)
-    # occlusion_padding = np.ones(aa.shape)
-    # occlusion_padding[14:20, 14:20] = 0
-    #
-    # noise_padding = np.random.normal(0, 3, (28, 28))
-    #
-    # # occluded input
-    # plt.imshow(aa * occlusion_padding, cmap='gray')
-    # plt.title('occluded sample')
-    # plt.show()
-    #
-    # # noisy input
-    # plt.imshow(aa + noise_padding, cmap='gray')
-    # plt.title('noisy sample')
-    # plt.show()
-    #
-    # occluded_input = (aa * occlusion_padding).reshape(784, 1)
-    # noisy_input = (aa + noise_padding).reshape(784, 1)
-    #
-    # # initialize
-    # net.initialize_network(batch_size=occluded_input.shape[1])
-    #
-    # for epoch_i in range(1):
-    #
-    #     for batch_i in range(1):
-    #
-    #         # isi
-    #         for t in range(isi_steps):
-    #             net.compute(inputs=np.zeros(occluded_input.shape), get_error=False)
-    #         # stimulus presentation
-    #         for t in range(time_steps):
-    #             net.compute(inputs=occluded_input, get_error=True)
-    #
-    #         int_fig = net.plots(1, 1)
-    #         int_fig.show()
-    #         err_fig = net.plot_error(1, 1)
-    #         err_fig.show()
-    #
-    #         # isi
-    #         for t in range(isi_steps):
-    #             net.compute(inputs=np.zeros(noisy_input.shape), get_error=False)
-    #         # stimulus presentation
-    #         for t in range(time_steps):
-    #             net.compute(noisy_input, get_error=True)
-    #
-    #         int_fig = net.plots(1, 1)
-    #         int_fig.show()
-    #         err_fig = net.plot_error(1, 1)
-    #         err_fig.show()
-
-    # # single neuron example: the time course rep circuit
-    # neuron_exc = np.zeros(time_steps * 2)
-    # neuron_inh = np.zeros(time_steps * 2)
-    # neuron_rel = np.zeros(time_steps * 2)
-    # tau_exc = 10e-3
-    # tau_inh = 2e-3
-    # input_exc = 5
-    # input_inh = 2
-    #
-    # # r + (-r + fx + bg) * (self.resolution / tau)
-    # for t in range(time_steps * 2 - 1):
-    #     if t < time_steps - 1:
-    #         neuron_exc[t + 1] = neuron_exc[t] + (1e-3 / tau_exc) * (-neuron_exc[t] + ReLu(input_exc - neuron_inh[t]))
-    #         neuron_inh[t + 1] = neuron_inh[t] + (1e-3 / tau_inh) * (-neuron_inh[t] + ReLu(input_inh))
-    #         neuron_rel[t + 1] = neuron_rel[t] + (1e-3 / tau_exc) * (-neuron_rel[t] + ReLu(neuron_exc[t]))
-    #     else:
-    #         neuron_exc[t + 1] = neuron_exc[t] + (1e-3 / tau_exc) * (-neuron_exc[t] + ReLu(0 - neuron_inh[t]))
-    #         neuron_inh[t + 1] = neuron_inh[t] + (1e-3 / tau_inh) * (-neuron_inh[t] + ReLu(0))
-    #         neuron_rel[t + 1] = neuron_rel[t] + (1e-3 / tau_exc) * (-neuron_rel[t] + ReLu(neuron_exc[t]))
-    # sn_fig, sn_axs = plt.subplots(nrows=3, ncols=1, sharex='all', sharey='all')
-    # sn_axs[0].plot(neuron_exc)
-    # sn_axs[0].set_title('exc')
-    # sn_axs[1].plot(neuron_inh)
-    # sn_axs[1].set_title('inh')
-    # sn_axs[1].set_ylabel('firing rate (Hz)')
-    # sn_axs[2].plot(neuron_rel)
-    # sn_axs[2].set_title('rel')
-    # sn_axs[2].set_xlabel('time (ms)')
-    # sn_fig.tight_layout()
-    # sn_fig.show()
-
-    # # normalized mse
-    # layer_n = 0
-    #
-    # ss_fig, ss_axs = plt.subplots(nrows=2, ncols=1, sharex='all')
-    # ss_axs[0].plot(net.errors[f'layer_{layer_n}}']['ppe'], c='r')
-    # ss_axs[0].set_ylabel('MSE')
-    # ss_axs[0].set_title('pPE')
-    # ss_axs[1].plot(net.errors[f'layer_{layer_n}']['npe'], c='b')
-    # ss_axs[1].set_xlabel('time (ms)')
-    # ss_axs[1].set_ylabel('MSE')
-    # ss_axs[1].set_title('nPE')
-    # ss_fig.tight_layout()
-    # ss_fig.show()
-    #
-    # npe = net.errors[f'layer_{layer_n}']['npe'] / np.max(net.errors[f'layer_{layer_n}']['npe'])
-    # ppe = net.errors[f'layer_{layer_n}']['ppe'] / np.max(net.errors[f'layer_{layer_n}']['ppe'])
-    # plt.plot(ppe, c='r', label='ppe')
-    # plt.plot(npe, c='b', label='npe')
-    # plt.ylabel('MSE')
-    # plt.xlabel('time (ms)')
-    # plt.title('normalized MSE at layer 0')
-    # plt.legend()
-    # plt.show()
-
-    # opto
-
-    # opto_net = network(
-    #     neurons_per_layer=net.net_size,
-    #     bu_rate=net.bu_rate, td_rate=net.td_rate,
-    #     tau_exc=net.tau_exc, tau_inh=net.tau_inh,
-    #     symm_w=True, pretrained_weights=net.weights,
-    #     bg_exc=0.0, bg_inh=0.0, jitter_lvl=0.0, jitter_type='constant'
-    # )
-    # opto_net.activate_silencer(target_layer='layer_0', target_neuron='ppe_sst')
-    # computor = opto_net.compute
-    # opto_net.initialize_network(batch_size=test_x[noise_recon_idx].T.shape[1])
-    # opto_net.initialize_error()
-    # # isi
-    # for t_step in range(100):
-    #     computor(inputs=np.zeros(test_x[noise_recon_idx].T.shape), record=None)
-    # rep_save = np.zeros((*opto_net.network['layer_1']['rep_r'].shape, 1000))
-    # # stimulus presentation
-    # for t_step in range(1000):
-    #     computor(inputs=test_x[noise_recon_idx].T, record='error')
-    #     # rep_save += model.network['layer_1']['rep_r']
-    #     rep_save[:, :, t_step] = opto_net.network['layer_1']['rep_r']
-    #
-    # layer = 0
-    # input_fr = opto_net.network[f'layer_{layer}']['rep_e']
-    # pred_fr = opto_net.weights[f'{layer}{layer + 1}'].T @ opto_net.network[f'layer_{layer + 1}']['rep_r']
-    #
-    # # plot reconstruction
-    #
-    # _, _, input_pad = generate_reconstruction_pad(img_mat=input_fr)  # , nx=4)
-    # _, _, pred_pad = generate_reconstruction_pad(img_mat=pred_fr)  # , nx=4)
-    #
-    # recon_fig, recon_axs = plt.subplots(nrows=1, ncols=2, sharex='all', sharey='all',
-    #                                     figsize=(10, 4))
-    # input_imgs = recon_axs[0].imshow(input_pad, cmap='gray')
-    # recon_fig.colorbar(input_imgs, ax=recon_axs[0], shrink=0.4)
-    # recon_axs[0].set_title('input')
-    # pred_imgs = recon_axs[1].imshow(pred_pad, cmap='gray')
-    # recon_fig.colorbar(pred_imgs, ax=recon_axs[1], shrink=0.4)
-    # recon_axs[1].set_title('prediction')
-    # for ax in recon_axs.flatten():
-    #     ax.axis('off')
-    #
-    # recon_fig.suptitle(f'reconstruction at layer {layer}')
-    # recon_fig.tight_layout()
-    #
-    # err_fig, err_axs = plt.subplots(1, 1)
-    # err_axs.plot(opto_net.errors['layer_0']['ppe_pyr'], label='PE+')
-    # err_axs.plot(opto_net.errors['layer_0']['npe_pyr'], label='PE-')
-    # err_axs.spines['top'].set_visible(False)
-    # err_axs.spines['right'].set_visible(False)
-    # err_axs.legend()
-    # err_fig.show()
-    #
-    # recon_fig.savefig(model_dir + 'opto/ppe_sst.png', dpi=300)
-    # err_fig.savefig(model_dir + 'opto/ppe_sst_errors.png', dpi=300)
-
-    # plot for hbp
-    # t_infer = 200
-    # rep_r_save = np.zeros((*net.network['layer_1']['rep_r'].shape, t_infer))
-    # rep_ppe_save = np.zeros((*net.network['layer_0']['ppe_pyr'].shape, t_infer))
-    # rep_npe_save = np.zeros((*net.network['layer_0']['npe_pyr'].shape, t_infer))
-    # recon_save = np.zeros((784, t_infer))
-    #
-    # for t in trange(t_infer):
-    #     net.compute(curr_batch)
-    #     rep_r_save[:, :, t] = net.network['layer_1']['rep_r']
-    #     rep_ppe_save[:, :, t] = net.network['layer_0']['ppe_pyr']
-    #     rep_npe_save[:, :, t] = net.network['layer_0']['npe_pyr']
-    #     recon_save[:, t] = (net.weights['01'].T @ net.network['layer_1']['rep_r'])[:, 0]
-    #     plt.show()
-    #
-    # plt.close('all')
-    #
-    # recon_idcs = np.arange(0, 200, 10)
-    #
-    # fig, axs = plt.subplots(3, 1)
-    # for i in range(1):
-    #     axs[0].plot(rep_r_save[:, i, :].mean(axis=0))
-    #     for idx in recon_idcs:
-    #         axs[0].axvline(x=idx, ls='--', c='black')
-    #     axs[1].plot(rep_ppe_save[:, i, :].mean(axis=0))
-    #     axs[2].plot(rep_npe_save[:, i, :].mean(axis=0))
-    # fig.show()
-    #
-    # # min_idcs = np.argwhere(avg_fr_rep < (avg_fr_rep.min() + 1e-4)).flatten()
-    # # max_idcs = np.argwhere(avg_fr_rep > (avg_fr_rep.max() - 1e-4)).flatten()
-    # #
-    #
-    # recon_fig, recon_axs = plt.subplots(nrows=2, ncols=10)
-    # for i, ax in enumerate(recon_axs.flat):
-    #     ax.imshow(recon_save[:, recon_idcs[i]].reshape(28,28), cmap='gray', vmin=0, vmax=1)
-    #     ax.axis('off')
-    # recon_fig.show()
-    #
-    # ppe_ex = rep_ppe_save[:, 0, :]
-    # ppe_fig, ppe_axs = plt.subplots(nrows=2, ncols=10)
-    # for i, ax in enumerate(ppe_axs.flat):
-    #     ax.imshow(ppe_ex[:, recon_idcs[i]].reshape(28,28), cmap='Reds', vmin=0, vmax=1)
-    #     ax.axis('off')
-    # ppe_fig.show()
-    #
-    # npe_ex = rep_npe_save[:, 0, :]
-    # npe_fig, npe_axs = plt.subplots(nrows=2, ncols=10)
-    # for i, ax in enumerate(ppe_axs.flat):
-    #     ax.imshow(npe_ex[:, recon_idcs[i]].reshape(28,28), cmap='Blues', vmin=0, vmax=1)
-    #     ax.axis('off')
-    # ppe_fig.show()
+def plot_training_errors(sim_params, errs):
 
     # fig 2B - errors
-    # tsim = int(sim_params['sim_time'] / sim_params['dt'])
-    # tisi = int(sim_params['isi_time'] / sim_params['dt'])
-    # plt.close('all')
-    # aa = np.zeros(sim_params['n_epoch'])
-    # bb = np.zeros(sim_params['n_epoch'])
-    # len_epoch = int(tsim + tisi) * int(sim_params['n_class'] * sim_params['n_sample'] / sim_params['batch_size'])
-    # for i in range(sim_params['n_epoch']):
-    #     curr_epoch_ppe = errs['layer_0']['ppe_pyr'][i * len_epoch: (i + 1) * len_epoch]
-    #     curr_epoch_npe = errs['layer_0']['npe_pyr'][i * len_epoch: (i + 1) * len_epoch]
-    #     aa[i] = curr_epoch_ppe[-1]
-    #     bb[i] = curr_epoch_npe[-1]
-    # fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-    # ax.plot(aa, c='red', lw=2.0, label='PE+')
-    # ax.plot(bb, c='blue', lw=2.0, label='PE-')
-    # ax.spines['top'].set_visible(False)
-    # ax.spines['right'].set_visible(False)
-    # ax.spines['left'].set_linewidth(2)
-    # ax.spines['bottom'].set_linewidth(2)
-    # ax.set_xlabel('training iteration', fontsize=20)
-    # ax.set_ylabel('firing rate (a.u.)', fontsize=20)
-    # ax.tick_params(axis='both', which='major', labelsize=20)
-    # fig.legend(labelcolor='linecolor', fontsize=20, edgecolor='white')  # , fancybox=True, shadow=True)
-    # fig.tight_layout()
-    # fig.show()
-    # fig.savefig('/home/kwangjun/PycharmProjects/si_pc/cifar10/figures/fig2_errs.png', dpi=300, bbox_inches='tight')
+    tsim = int(sim_params['sim_time'] / sim_params['dt'])
+    tisi = int(sim_params['isi_time'] / sim_params['dt'])
+    plt.close('all')
+    aa = np.zeros(sim_params['n_epoch'])
+    bb = np.zeros(sim_params['n_epoch'])
+    len_epoch = int(tsim + tisi) * int(sim_params['n_class'] * sim_params['n_sample'] / sim_params['batch_size'])
+    for i in range(sim_params['n_epoch']):
+        curr_epoch_ppe = errs['layer_0']['ppe_pyr'][i * len_epoch: (i + 1) * len_epoch]
+        curr_epoch_npe = errs['layer_0']['npe_pyr'][i * len_epoch: (i + 1) * len_epoch]
+        aa[i] = curr_epoch_ppe[-1]
+        bb[i] = curr_epoch_npe[-1]
+    fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+    ax.plot(aa, c='#CA181D', lw=3.0, label='PE+')
+    ax.plot(bb, c='#2070B4', lw=3.0, label='PE-')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(2)
+    ax.spines['bottom'].set_linewidth(2)
+    ax.set_xlabel('training iteration', fontsize=20)
+    ax.set_ylabel('firing rate (a.u.)', fontsize=20)
+    ax.tick_params(axis='both', which='major', labelsize=20)
+    fig.legend(labelcolor='linecolor', fontsize=20, edgecolor='white')  # , fancybox=True, shadow=True)
+    fig.tight_layout()
+
+    return fig
