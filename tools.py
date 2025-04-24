@@ -13,7 +13,7 @@ def sigmoid(x, sat_val=30, offset=5):
     return sat_val / (1 + np.exp(-x + offset))
 
 
-def ReLu(x, theta=0):
+def ReLu(x, theta=0.0):
     new_x = x - theta
 
     return np.maximum(new_x, 0)

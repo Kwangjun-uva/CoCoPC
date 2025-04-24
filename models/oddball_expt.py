@@ -33,7 +33,13 @@ def get_dev_idx(deviant_idx, idcs_list):
     else:
         return deviant_idx
 
-def oddball_simulation(sim_type, sim_params, dataset, dev_idx = None, len_seq=5, loc_deviant = 3, record='all', savefig=False):
+def oddball_simulation(
+        sim_type, sim_params, dataset,
+        dev_idx = None, len_seq=5, loc_deviant = 3, omission=False,
+        record='all', savefig=False,
+        profopol_str=0.0
+):
+
     ref_img = dataset['test_x'][0]
     ref_class = dataset['test_y'][0]
 
@@ -76,6 +82,12 @@ def oddball_simulation(sim_type, sim_params, dataset, dev_idx = None, len_seq=5,
         idx_random = np.random.choice(np.arange(len(fmnist_y)), 1, replace=False)[0]
         ref_img = fmnist_x[idx_random]
 
+    # omit deviant image
+    if omission:
+        odd_img *= 0.0
+    else:
+        pass
+
     # oddball figure
     oddball_x, odd_fig = oddball_input_generator(
         standard_img=ref_img, deviant_img=odd_img, n_seq=len_seq, dev_loc=loc_deviant
@@ -88,7 +100,7 @@ def oddball_simulation(sim_type, sim_params, dataset, dev_idx = None, len_seq=5,
     # oddball simulation
     oddball_net, re_fig = test_oddball(
         sim_params=sim_params, weights=weights, oddball_x=oddball_x,
-        record=record
+        record=record, profopol_str=profopol_str
     )
 
     odd_fig._suptitle._text += f': {sim_type}'
@@ -125,15 +137,53 @@ sim_types = ['training_same', 'training_different', 'test_same', 'test_different
 #     oddball_response.show()
 
 sim_params['isi_time'] = 0.005
-oddball_inputs, oddball_net, oddball_seq, oddball_response = oddball_simulation(
-    sim_type='test_different',
-    sim_params=sim_params,
-    dataset=dataset,
-    dev_idx=100,
-    len_seq=5,
-    loc_deviant=2,
-    record='all',
-    savefig=False
-)
-oddball_seq.show()
-oddball_response.show()
+
+# tau = [2, 4, 10, 20, 40, 100, 200]
+# freq = [70, 30, 12, 6, 3, 1.2, 0.6]
+# sim_params['tau_exc'] = 0.002
+# sim_params['tau_inh'] = 0.015
+sim_params['sim_time'] = 2.0
+
+for str in [1,3,5,7,9]:
+
+    oddball_inputs, oddball_net, oddball_seq, oddball_response = oddball_simulation(
+        sim_type='test_different',
+        sim_params=sim_params,
+        dataset=dataset,
+        dev_idx=1135,
+        len_seq=7,
+        loc_deviant=4,
+        omission=False,
+        record='interneurons',
+        savefig=False,
+        profopol_str=str/10
+    )
+    # oddball_seq.show()
+    # oddball_response.show()
+    oddball_response.savefig(f'/home/kwangjun/Desktop/cocopc_revision/oddball_pfp{str:02d}.png', bbox_inches='tight')
+
+# bird: test_x, 1135
+# truck: test_x, 0
+
+
+# # oddball for interneurons
+# from script.pc_network import create_vlines, remove_top_right_spines
+#
+# interneuron_keys = [key for key in oddball_net.errors['layer_0'].keys() if ('pe' in key) and ('pyr' not in key)]
+# interneuron_colors = ['#FF2F92', '#F90000', '#FF6666', '#00B0F0', '#0432FF', '#76ADEE']
+# plt.close('all')
+# fig, axs = plt.subplots(nrows=2, ncols=3, sharex=True, figsize=(15, 5))
+# for sub_ax_i, sub_ax in enumerate(axs.flat):
+#     key_i = interneuron_keys[sub_ax_i]
+#     sub_ax.plot(oddball_net.errors['layer_0'][key_i], c=interneuron_colors[sub_ax_i], lw=2)
+#     create_vlines(
+#         target_axes=sub_ax, total_sim_time=len(oddball_net.errors['layer_0'][key_i]),
+#         trial_sim_time=int(sim_params['sim_time'] / sim_params['dt']),
+#         interval_time=int(sim_params['isi_time'] / sim_params['dt'])
+#     )
+#     remove_top_right_spines(target_axes=sub_ax, target_spines=['top', 'right'])
+#     sub_ax.set_ylim([0,1])
+#     sub_ax.set_xticks([0, 2500, 5000, 7500, 10000])
+#     sub_ax.set_xticklabels([])
+# fig.tight_layout()
+# fig.show()

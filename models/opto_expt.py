@@ -203,60 +203,82 @@ fig_save_dir = model_dir + 'opto/'
 
 # work on rep pop response!
 
-target_neuron_type = 'pv'
-if target_neuron_type == 'none':
-    ppe_target = None
-    npe_target = None
-else:
-    ppe_target = f'ppe_{target_neuron_type}'
-    npe_target = f'npe_{target_neuron_type}'
+from skimage.metrics import mean_squared_error as mse
+from skimage.metrics import structural_similarity as ssim
 
-opto_net, recon_fig, rep_fig, _, input_img, pred_img = test_opto(
-        simul_params=sim_params, learned_weights=weights,
-        img_data=test_x, img_label=test_y,
-        # silence_target=[('layer_0', 'ppe_vip'), ('layer_0', 'npe_vip')],
-        silence_target=[('layer_0', ppe_target), ('layer_0', npe_target)],
-        record_var='all',
-        rdm=False
-    )
-rep_fig.show()
+cell_types = ['none', 'pv', 'sst', 'vip']
 
+mse_dict = {cell:0 for cell in cell_types}
+ssim_dict = {cell:0 for cell in cell_types}
 
-total_t = len(opto_net.errors['layer_0']['ppe_pyr'])
-t_sim = int(sim_params['sim_time'] / 1e-3)
-t_isi = int(sim_params['isi_time'] / 1e-3)
+for target_neuron_type in cell_types:
 
-font = {'family': 'Arial',
-        'color':  'darkred',
-        'weight': 'normal',
-        'size': 20,
-        'color': 'black'
-        }
+    # target_neuron_type = 'none'
+    if target_neuron_type == 'none':
+        ppe_target = None
+        npe_target = None
+    else:
+        ppe_target = f'ppe_{target_neuron_type}'
+        npe_target = f'npe_{target_neuron_type}'
 
-plt.close('all')
-response_fig, response_axs = plt.subplots(1,1, figsize=(6, 3))
-response_axs.plot(opto_net.errors['layer_0']['ppe_pyr'][t_isi:], lw=2.0, c='r')
-response_axs.plot(opto_net.errors['layer_0']['npe_pyr'][t_isi:], lw=2.0, c='b')
-response_axs.plot(np.arange(0, 101), -0.1 * np.ones(101), linewidth=5, c='black')
-response_axs.spines['top'].set_visible(False)
-response_axs.spines['right'].set_visible(False)
-response_axs.spines['left'].set_visible(False)
-response_axs.spines['bottom'].set_visible(False)
-response_axs.text(-60, -0.1, '100 ms', fontdict=font)
-response_axs.set_yticks([])
-response_axs.set_xticks([])
-# for yi in np.arange(0, total_t, t_sim + t_isi):
-#     ax.axvline(x=yi, ls='--', c='black')
-#     ax.axvline(x=yi + t_isi, ls='--', c='black')
-# response_axs.legend()
-response_fig.tight_layout()
-# response_fig.savefig(f'/home/kwangjun/PycharmProjects/si_pc/cifar10/fig6_{target_neuron_type}_osc.png', dpi=300, bbox_inches='tight')
-response_fig.show()
+    opto_net, recon_fig, rep_fig, _, input_img, pred_img = test_opto(
+            simul_params=sim_params, learned_weights=weights,
+            img_data=test_x, img_label=test_y,
+            # silence_target=[('layer_0', 'ppe_vip'), ('layer_0', 'npe_vip')],
+            silence_target=[('layer_0', ppe_target), ('layer_0', npe_target)],
+            record_var='all',
+            rdm=False
+        )
+    rep_fig.show()
 
-recon_none = opto_net.weights['01'].T @ opto_net.network['layer_1']['rep_r']
-_, _, pred_pad = generate_reconstruction_pad(img_mat=recon_none, nx=6)
-fig, axs = plt.subplots(1, 1)
-axs.imshow(pred_pad, cmap='gray', vmin=0, vmax=1)
-axs.axis('off')
-# fig.savefig('/home/kwangjun/PycharmProjects/si_pc/cifar10/fig6_recon_{target_neuron_type}.png', dpi=300, bbox_inches='tight')
-fig.show()
+    input_imgs = opto_net.network['layer_0']['rep_e'].T.reshape(30, 32,32)
+    pred_imgs = (opto_net.weights['01'].T @ opto_net.network['layer_1']['rep_r']).T.reshape(30, 32, 32)
+
+    for i in range(len(input_imgs)):
+
+        mse_dict[target_neuron_type] += mse(input_imgs[i], pred_imgs[i])
+        ssim_dict[target_neuron_type] += ssim(input_imgs[i], pred_imgs[i])
+
+    mse_dict[target_neuron_type] /= len(input_imgs)
+    ssim_dict[target_neuron_type] /= len(input_imgs)
+
+    total_t = len(opto_net.errors['layer_0']['ppe_pyr'])
+    t_sim = int(sim_params['sim_time'] / 1e-3)
+    t_isi = int(sim_params['isi_time'] / 1e-3)
+
+    font = {'family': 'Arial',
+            'color':  'darkred',
+            'weight': 'normal',
+            'size': 20,
+            'color': 'black'
+            }
+
+    plt.close('all')
+    response_fig, response_axs = plt.subplots(1,1, figsize=(6, 3))
+    response_axs.plot(opto_net.errors['layer_0']['ppe_pyr'][t_isi:], lw=2.0, c='r')
+    response_axs.plot(opto_net.errors['layer_0']['npe_pyr'][t_isi:], lw=2.0, c='b')
+    response_axs.plot(np.arange(0, 101), -0.1 * np.ones(101), linewidth=5, c='black')
+    response_axs.spines['top'].set_visible(False)
+    response_axs.spines['right'].set_visible(False)
+    response_axs.spines['left'].set_visible(False)
+    response_axs.spines['bottom'].set_visible(False)
+    response_axs.text(-60, -0.1, '100 ms', fontdict=font)
+    response_axs.set_yticks([])
+    response_axs.set_xticks([])
+    # for yi in np.arange(0, total_t, t_sim + t_isi):
+    #     ax.axvline(x=yi, ls='--', c='black')
+    #     ax.axvline(x=yi + t_isi, ls='--', c='black')
+    # response_axs.legend()
+    response_fig.suptitle(f'Silencing {target_neuron_type}')
+    response_fig.tight_layout()
+    # response_fig.savefig(f'/home/kwangjun/PycharmProjects/si_pc/cifar10/fig6_{target_neuron_type}_osc.png', dpi=300, bbox_inches='tight')
+    response_fig.show()
+
+    recon_none = opto_net.weights['01'].T @ opto_net.network['layer_1']['rep_r']
+    _, _, pred_pad = generate_reconstruction_pad(img_mat=recon_none, nx=6)
+    fig, axs = plt.subplots(1, 1)
+    axs.imshow(pred_pad, cmap='gray', vmin=0, vmax=1)
+    axs.axis('off')
+    fig.suptitle(f'Silencing {target_neuron_type}')
+    # fig.savefig('/home/kwangjun/PycharmProjects/si_pc/cifar10/fig6_recon_{target_neuron_type}.png', dpi=300, bbox_inches='tight')
+    fig.show()

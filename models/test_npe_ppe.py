@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from practice_scalar import dr
 
-T = 10.0  # sec
+T = 8.0  # sec
 T_steps = int(T / dt)
 
 # test pPE and nPE
@@ -52,7 +52,7 @@ w_self = 1.0
 
 act_func = 'relu'
 bg_noise = 0.0
-input_noise = 0.1
+input_noise = 0.0
 
 for i in range(T_steps - 1):
     # input to ppe

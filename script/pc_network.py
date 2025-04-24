@@ -267,14 +267,16 @@ def test_oddball(
         sim_params, weights, oddball_x,
         record='error',
         bg_exc=0.0, bg_inh=0.0,
-        jit_type='constant', jit_lvl=0.0
+        jit_type='constant', jit_lvl=0.0,
+        profopol_str=0.0
 ):
     oddball_net = network(
         neurons_per_layer=sim_params['net_size'],
         bu_rate=sim_params['bu_rate'], td_rate=sim_params['td_rate'],
         tau_exc=sim_params['tau_exc'], tau_inh=sim_params['tau_inh'],
         symm_w=sim_params['symmetric_weight'], pretrained_weights=weights,
-        bg_exc=bg_exc, bg_inh=bg_inh, jitter_lvl=jit_lvl, jitter_type=jit_type
+        bg_exc=bg_exc, bg_inh=bg_inh, jitter_lvl=jit_lvl, jitter_type=jit_type,
+        profopol_str=profopol_str
     )
 
     if sim_params['symmetric_weight']:
@@ -358,14 +360,14 @@ def test_oddball(
             for h, t in zip(leg.legendHandles, leg.get_texts()):
                 t.set_color(h.get_facecolor()[0])
 
-        elif record == 'all':
+        elif (record == 'all') or (record == 'interneurons'):
             # error + rep figure
             re_ax1 = re_fig.add_subplot(311)
-            re_ax1.plot(oddball_net.errors['layer_1']['rep_r'], label='rep', c='purple')
+            re_ax1.plot(oddball_net.errors['layer_1']['rep_r'], label='rep', c='#6950A3')
             re_ax2 = re_fig.add_subplot(312)
-            re_ax2.plot(oddball_net.errors['layer_0']['ppe_pyr'], label='PE+', c='r')
+            re_ax2.plot(oddball_net.errors['layer_0']['ppe_pyr'], label='PE+', c='#CA181D')
             re_ax3 = re_fig.add_subplot(313)
-            re_ax3.plot(oddball_net.errors['layer_0']['npe_pyr'], label='PE-', c='b')
+            re_ax3.plot(oddball_net.errors['layer_0']['npe_pyr'], label='PE-', c='#2070B4')
 
             for ax_i, ax in enumerate(re_fig.axes):
 
@@ -685,7 +687,8 @@ class network(object):
             tau_exc=20e-3, tau_inh=20e-3,
             bg_exc=0, bg_inh=0, resolution=1e-3,
             symm_w=True,
-            jitter_lvl=0.0, jitter_type='constant'
+            jitter_lvl=0.0, jitter_type='constant',
+            profopol_str = 0.0
     ):
 
         self.bu_rate = bu_rate
@@ -712,6 +715,7 @@ class network(object):
             self.initialize_ind_weights(weights=pretrained_weights)
 
         self.noise = False
+        self.profopol_inh = 1.0 - profopol_str
 
     def generate_np_weights(self, jitter_lvl, jitter_type, target_shape, layer='curr'):
 
@@ -1000,7 +1004,10 @@ class network(object):
                         silence=(layer, 'rep_r') in self.silence_target
                     )
 
-                prediction = self.weights[f'{layer_i}{layer_i + 1}'].T @ self.network[f'layer_{layer_i + 1}']['rep_r']
+                prediction = self.profopol_inh * (
+                        self.weights[f'{layer_i}{layer_i + 1}'].T @
+                              self.network[f'layer_{layer_i + 1}']['rep_r']
+                              )
                 # prediction_ppe = self.weights[f'{layer_i}{layer_i + 1}']['ppe'].T @
                 # self.network[f'layer_{layer_i + 1}']['rep_r']
                 # prediction_npe = self.weights[f'{layer_i}{layer_i + 1}']['npe'].T @
@@ -1349,6 +1356,12 @@ class network(object):
             var_list = ['rep_r']
         elif var == 'all':
             var_list = ['ppe_pyr', 'npe_pyr', 'rep_r']
+        elif var == 'interneurons':
+            var_list = [
+                'ppe_pyr', 'npe_pyr', 'rep_r',
+                'ppe_pv', 'ppe_sst', 'ppe_vip',
+                'npe_pv', 'npe_sst', 'npe_vip'
+            ]
         else:
             raise ValueError('Please choose either error or rep.')
 

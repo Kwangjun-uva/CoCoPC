@@ -2,10 +2,10 @@ import numpy as np
 
 # time constant: cite?
 # excitatory
-tau_exc = 40e-3
+tau_exc = 2e-3#40e-3
 # inhibitory
 # tau_inh = 2e-3
-tau_inh = 20e-3
+tau_inh = 2e-3#20e-3
 
 # scale factor for proportions
 nPC = 1
