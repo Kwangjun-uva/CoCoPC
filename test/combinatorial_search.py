@@ -191,7 +191,7 @@ from tools import ReLu
 # pe_mats : ALL possible connectivity matrices
 # inp_mat : ALL possible input matrices
 
-class combinatorial_search(object):
+class run_combinatorial_search(object):
 
     def __init__(self, total_sim_time=6.0, sim_resolution=1e-3, tau_e=20e-3, tau_i=20e-3, bg_e=0.0, bg_i=0.0):
 
@@ -450,7 +450,7 @@ def drdt(r, Isyn):
 
 if __name__ == '__main__':
 
-    searcher = combinatorial_search()
+    searcher = run_combinatorial_search()
     input_pattern_fig = searcher.plot_input_pattern()
     input_pattern_fig.show()
 
