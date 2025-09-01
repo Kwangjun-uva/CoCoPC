@@ -1,7 +1,10 @@
-from test.combo import combinatorial_search, plot_mean_firing_rates
+from test.combinatorial_search import run_combinatorial_search, plot_mean_firing_rates
+
+
+#################### combinatorial search ####################
 
 # initialize combinatorial search
-searcher = combinatorial_search()
+searcher = run_combinatorial_search()
 
 # show input pattern
 input_pattern_fig = searcher.plot_input_pattern()
@@ -17,3 +20,7 @@ ppe_stats, npe_stats, pe_response_fig = plot_mean_firing_rates(
     windows=searcher.windows, frs=combi_dict[combo_idx[0]][[0, 4]]
 )
 pe_response_fig.show()
+
+##############################################################
+
+#################### train model ####################
