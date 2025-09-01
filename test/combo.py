@@ -237,7 +237,7 @@ class combinatorial_search(object):
 
         # define intervals
         interval_start = np.arange(0.1 * self.steps, 1.0 * self.steps, 0.3 * self.steps).astype(int)
-        input_duration = 0.1 * self.steps
+        input_duration = int(0.1 * self.steps)
         windows = [(interval_i, interval_i + input_duration) for interval_i in interval_start]
 
         # define under and overprediction interval order (at 0, bu = td)
@@ -249,6 +249,7 @@ class combinatorial_search(object):
 
         # create bu and td input patterns
         for interval_idx, (t_start, t_end) in enumerate(windows):
+
             bu_input[slice(t_start, t_end)] = input_str - (offset_str * (interval_idx == overprediction_interval))
             td_input[slice(t_start, t_end)] = input_str - (offset_str * (interval_idx == underprediction_interval))
 
