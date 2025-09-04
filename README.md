@@ -79,4 +79,36 @@ References:
 
 [5] Alamia, A., & VanRullen, R. (2019). Alpha oscillations and traveling waves: Signatures of predictive coding?. PLoS Biology, 17(10), e3000487.
 
-aaa
+######### how to use #########
+Once this work is publushed, I will provide a link. All figures mentioned in this instruction refer to those in the paper.
+
+To start, you can either:
+
+1. Use pretrained data at:
+
+results/
+- sim_params.pkl: simulation parameters used during training
+- weights.pkl: trained weights from training
+- dataset.pkl: training and test datasets used during training and analysis
+- error.pkl: mean predictin errors across training epochs (for Fig2)
+
+You can replicate all results in the paper by running modules in:
+
+figureGen/
+- fig1.py
+- fig2.py
+- fig3.py
+- fig4.py
+- fig5.py
+- fig6.py
+- videoS1.py
+
+The module names correspond to figurs in the paper. 
+
+2. Train a model yourself by running:
+
+main.py
+
+This script will generate dataset given parameters (datatset_type, n_class, and n_sample) and train a model on it. Note that outputs of the training will replace the existing pre-trained weights, unless you specify model_dir differently. Once the training is complete, you can use modules in figureGen/ to run analysis. 
+
+##############################
