@@ -1,7 +1,7 @@
 from script.microcircuit_response import barplot_response, plot_inputPatterns, test_npe_ppe
 
 bu_input, td_input, r_ppe_e, r_npe_e, activity_idcs = test_npe_ppe(
-    T=10.0, act_func='relu', bg_noise=0.1, input_noise=0.0
+    T=10.0, act_func='ReLu', bg_noise=0.0, input_noise=0.0
 )
 
 # fig 1A: pPE and nPE responses with barplots

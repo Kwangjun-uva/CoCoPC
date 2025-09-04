@@ -1,4 +1,3 @@
-from script.params import dt
 from script.tools import dr
 import numpy as np
 import matplotlib.pyplot as plt
@@ -76,8 +75,9 @@ def test_npe_ppe(
         T=10.0,
         act_func='relu',
         input_current=1.0,
-        bg_noise=0.0, input_noise=0.0
+        dt=0.001, bg_noise=0.0, input_noise=0.0
 ):
+
     T_steps = int(T / dt)
 
     # test pPE and nPE

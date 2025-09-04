@@ -2,41 +2,55 @@ import numpy as np
 import pickle
 import os
 import matplotlib.pyplot as plt
-from script.params import params_dict
+
+from tqdm import trange
+
+# from script.params import params_dict
+
 
 dt = 0.001
 
+def f(x, func_type='ReLu'):
 
-def jorge(x, d=10.0, theta=dt * 0.1):
-    return (x - theta) / (1 - np.exp(-d * (x - theta)))
+    if func_type == 'jorge':
 
+        d = 10.0
+        theta = dt * 0.1
 
-def sigmoid(x, sat_val=30, offset=5):
-    return sat_val / (1 + np.exp(-x + offset))
-
-
-def ReLu(x, theta=0):
-    new_x = x - theta
-
-    return np.maximum(new_x, 0)
+        return (x - theta) / (1 - np.exp(-d * (x - theta)))
 
 
-def dr(r, inputs, func='relu', ei_type='inh', input_noise=0.0, bg_noise=0.0):
+    elif func_type == 'sigmoid':
+
+        sat_val = 30
+        offset = 5
+
+        return sat_val / (1 + np.exp(-x + offset))
+
+
+    elif func_type == 'ReLu':
+
+        theta = 0
+        new_x = x - theta
+
+        return np.maximum(new_x, 0)
+
+    else:
+        raise ValueError('not supported')
+
+
+def dr(r, inputs, func='relu', ei_type='inh', tau=0.02, input_noise=0.0, bg_noise=0.0):
     noisy_input = inputs + np.random.normal(loc=0, scale=input_noise, size=np.array(inputs).shape)
 
-    fx = None
-    if func == 'jorge':
-        fx = jorge(x=noisy_input)
-    elif func == 'sigmoid':
-        fx = sigmoid(x=noisy_input)
-    elif func == 'relu':
-        fx = ReLu(x=noisy_input)
+    fx = f(x=noisy_input, func_type=func)
 
-    bg_r = params_dict[ei_type]['Ibg'] + np.random.normal(loc=0, scale=bg_noise, size=np.array(r).shape)
-    decay = -r / params_dict[ei_type]['tau_d']
-    rise = (fx + bg_r) / params_dict[ei_type]['tau_r']
+    bg_r = np.random.normal(loc=0, scale=bg_noise, size=np.array(r).shape)
+    # decay = -r / tau
+    # rise = (fx + bg_r) / tau
+    #
+    # return r + dt * (decay + rise)
 
-    return r + dt * (decay + rise)
+    return r + dt * (-r + fx + bg_r)
 
 
 def sample_imgs(img_labels, n_class, n_sample, class_choice=None):
@@ -133,7 +147,7 @@ def mean_errors(simulation_params, trial_errors, plot_by='epoch'):
     return errors, fig
 
 
-def plot_datset_dist():
+def plot_dataset_dist():
     import tensorflow as tf
 
     (mnist_images, _), (_, _) = tf.keras.datasets.mnist.load_data()
@@ -176,7 +190,95 @@ def load_sim_data(model_path):
 
 
 def create_dir(dir_path):
-    if os.path.exists(dir_path):
-        pass
-    else:
-        os.mkdir(dir_path)
+    try:
+        # Create the directory if it doesn't exist
+        os.makedirs(dir_path, exist_ok=True)
+    except OSError as e:
+        print(f"Error creating directory {dir_path}: {e}")
+        return
+
+def save_model(save_path, data_to_save):
+    """
+    Saves a dictionary of key-value pairs to the specified directory.
+    The keys become the filenames, and the values are the data.
+    """
+    # Create output directory if it doesn't exist
+    create_dir(save_path)
+
+    for filename, data in data_to_save.items():
+        file_path = os.path.join(save_path, f"{filename}.pkl")
+        try:
+            with open(file_path, 'wb') as f:
+                pickle.dump(data, f)
+            print(f"Successfully saved {file_path}")
+        except (IOError, pickle.PicklingError) as e:
+            print(f"Error saving {file_path}: {e}")
+
+### noise ###
+
+def noise_generator(noise_type, noise_lvl, target_shape):
+
+    noise_func = {
+        'uniform': [np.random.uniform, [-noise_lvl, noise_lvl],
+                    r'external noise ~ $\mathcal{U}$' + f' (0, {noise_lvl:.3f})'],
+        'normal': [np.random.normal, [0, noise_lvl],
+                   r'external noise ~ $\mathcal{N}$' + f' (0, {noise_lvl:.3f})'],
+        'constant': [return_self, [noise_lvl],
+                     f'external noise = (0, {noise_lvl:.2f})']
+    }
+
+    return noise_func[noise_type][0](*noise_func[noise_type][1], target_shape), noise_func[noise_type][2]
+
+
+def return_self(x, size):
+    return np.ones(size) * x
+
+
+### oddball ####
+
+def create_vlines(target_axes, total_sim_time, trial_sim_time, interval_time):
+    for yi in np.arange(0, total_sim_time, trial_sim_time + interval_time):
+        target_axes.axvline(x=yi, ls='--', c='black')
+        target_axes.axvline(x=yi + interval_time, ls='--', c='black')
+
+
+### plotting ###
+
+def remove_top_right_spines(target_axes, target_spines=None):
+    if target_spines is None:
+        target_spines = ['top', 'right']
+    for spine in target_spines:
+        target_axes.spines[spine].set_visible(False)
+
+### training ###
+
+def plot_training_errors(sim_params, errs):
+
+    # fig 2B - errors
+    tsim = int(sim_params['sim_time'] / sim_params['dt'])
+    tisi = int(sim_params['isi_time'] / sim_params['dt'])
+    plt.close('all')
+    aa = np.zeros(sim_params['n_epoch'])
+    bb = np.zeros(sim_params['n_epoch'])
+    len_epoch = int(tsim + tisi) * int(sim_params['n_class'] * sim_params['n_sample'] / sim_params['batch_size'])
+    for i in range(sim_params['n_epoch']):
+        curr_epoch_ppe = errs['layer_0']['ppe_pyr'][i * len_epoch: (i + 1) * len_epoch]
+        curr_epoch_npe = errs['layer_0']['npe_pyr'][i * len_epoch: (i + 1) * len_epoch]
+        aa[i] = curr_epoch_ppe[-1]
+        bb[i] = curr_epoch_npe[-1]
+    fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+    ax.plot(aa, c='#CA181D', lw=3.0, label='PE+')
+    ax.plot(bb, c='#2070B4', lw=3.0, label='PE-')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(2)
+    ax.spines['bottom'].set_linewidth(2)
+    ax.set_xlabel('training iteration', fontsize=20)
+    ax.set_ylabel('firing rate (a.u.)', fontsize=20)
+    ax.tick_params(axis='both', which='major', labelsize=20)
+    fig.legend(labelcolor='linecolor', fontsize=20, edgecolor='white')  # , fancybox=True, shadow=True)
+    fig.tight_layout()
+    fig.show()
+
+    return fig
+

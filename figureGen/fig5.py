@@ -1,45 +1,30 @@
-from script.tools import create_dir, load_sim_data
-# from script.oddball_expt import oddball_simulation, vary_devLoc_and_get_amplitudes, compute_mmn
-from script.oddball_expt import oddball_expt
+from figureGen.training_data import sim_params, weights, dataset
+from script.oddball import oddball_simulator
 
 
-# define model directory
-model_dir = '../results/trial03/'
-# create output directory
-save_dir = model_dir + 'oddball/'
-create_dir(save_dir)
-
-# load simulation results
-sim_params, weights, dataset = load_sim_data(model_path=model_dir)
-
+# define the length of oddball sequence
+sequence_length = 7
+# define the position of deviant stimulus in the sequence
+deviant_stim_pos = 4
 # initialize network for an oddball experiment
-sequence_length = 5
-deviant_stim_loc = 3
-oddball_net = oddball_expt(
-    len_seq=sequence_length, loc_dev=sequence_length,
-    simParams=sim_params, pretrained_weights=weights, dataset=dataset
+oddball_net = oddball_simulator(
+    len_seq=sequence_length, pos_dev=deviant_stim_pos,
+    sim_params=sim_params, pretrained_weights=weights, dataset=dataset,
+    dev_stim_type='testSet_differentClass'
 )
 
-# fig 5A and B: oddball sequence and response of pyramidal neurons
-sequence_fig, pyr_response_fig = oddball_net.simulate(
-    sim_type='test_different', record='all'
-)
-sequence_fig.show()
-pyr_response_fig.show()
+# fig 5A: oddball sequence
+oddball_net.simulate(record='all', show_sequence=True)
+# fig 5B: population mean responses of pyramidal neurons in PE+, PE-, and Rep circuits
+pyr_response_fig = oddball_net.plot_pop_responses(target='pyramidal')
 
-# supp fig: mismatch negativity
-mmn_fig = oddball_net.compute_mmn(signal_type=('layer_0', 'ppe_pyr'))
-mmn_fig.show()
+# S4 Fig B
+oddball_net.simulate(record='all', pfp_str=0.3, omit=True, show_sequence=True)
+omit_pfp_pyr_response_fig = oddball_net.plot_pop_responses(target='pyramidal')
+
+# S4 Fig C
+oddball_net.simulate(record='all', pfp_str=0.3, omit=False, show_sequence=True)
+pfp_pyr_response_fig = oddball_net.plot_pop_responses(target='pyramidal')
 
 # fig 5C:
-max_amplitudes, amp_fig, dev_response_fig = oddball_net.vary_devLoc_and_get_amplitudes()
-# reset dev loc
-oddball_net.loc_deviant = deviant_stim_loc
-
-# fig 5D: response of interneurons
-_, int_response_fig = oddball_net.simulate(
-    sim_type='test_different', record='interneurons'
-)
-# increase figure width for better visualization
-int_response_fig.set_figwidth(12)
-int_response_fig.show()
+max_amplitudes, amp_fig = oddball_net.vary_dev_loc_and_get_peaks()
