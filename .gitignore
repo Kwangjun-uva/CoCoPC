@@ -1,0 +1,5 @@
+# ignore JetBrains IDE configuration files
+/.idea/
+
+# ignore model directory
+models/
