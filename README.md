@@ -19,11 +19,7 @@ $$\tau  \dot{r} = −r_i + f(I_i)$$
 The model inferred the causes of sensory inputs via a hierarchical interaction between two prediction error microcircuits of one cortical column (PE+ and PE- of Area 1) and one representation microcircuit from another cortical column (Rep of Area 2; Fig 1A) that iteratively minimized prediction errors. The feedforward propagation of prediction errors projected from pyramidal cells of the two error microcircuits in layer 2/3 to the representation microcircuit in layer 4. The feedback projections that convey predictions of sensory inputs were made from pyramidal cells of layer 5 of the representation microcircuit to the two error microcircuits in layer 2/3. For synaptic plasticity, the weights between prediction error and representation microcircuits were updated through Hebbian learning:
 <p align="center">
 $$\dot{w}  = −\alpha_w  (r^{PE+,-}_{pyr} + r^{rep}_{pyr})$$
-</p>
-
-<br/>
-
-</p>
+</p> ... </p>
 
 <p align="center">
   <img src="https://github.com/Kwangjun-uva/CoCoPC/blob/master/recons_animation.gif">
@@ -79,33 +75,51 @@ References:
 
 [5] Alamia, A., & VanRullen, R. (2019). Alpha oscillations and traveling waves: Signatures of predictive coding?. PLoS Biology, 17(10), e3000487.
 
-######### how to use #########
-Once this work is publushed, I will provide a link. All figures mentioned in this instruction refer to those in the paper.
+<br>
+<br>
+<br>
+<br>
+<br>
 
-To start, you can either:
+############################ Code Instructions ############################
+<br>
+<br>
+Once this work is published, I will provide a link. 
+All figures mentioned in the instruction below refer to those corresponding in the paper.
+For the time being, details of this paper can be found here:
 
-1. Use pretrained data at:
+https://www.biorxiv.org/content/10.1101/2024.10.27.620494v1.abstract
 
-results/
-- sim_params.pkl: simulation parameters used during training
-- weights.pkl: trained weights from training
-- dataset.pkl: training and test datasets used during training and analysis
-- error.pkl: mean predictin errors across training epochs (for Fig2)
+The code consists of three directories:
 
-You can replicate all results in the paper by running modules in:
+1. **script/** <br>
+=> contains Python modules to simulate the cortical column model of predictive coding or analyze the results
+     
+2. **results/** <br>
+=> the default output directory for training results including:
+   - ***sim_params.pkl***: &nbsp; simulation parameters used during training
+   - ***weights.pkl***: &nbsp; trained weights from training
+   - ***dataset.pkl***: &nbsp; training and test datasets used during training and analysis
+   - ***error.pkl***: &nbsp; mean predictin errors across training epochs (for Fig2)
 
-figureGen/
-- fig1.py
-- fig2.py
-- fig3.py
-- fig4.py
-- fig5.py
-- fig6.py
-- videoS1.py
+3. **figureGen/** <br>
+=> contains Python modules to replicate results in the paper.
+   - fig1.py: &nbsp; positive and negative prediction error circuits
+   - fig2.py: &nbsp; training error and reconstruction samples
+   - fig3.py: &nbsp; robustness against external and internal noise
+   - fig4.py: &nbsp; emergent oscillations are phase-shifted and damped (4C), the frequency of which depends on membrane time constant
+   - fig5.py: &nbsp; oddball paradigm 
+   - fig6.py: &nbsp; optogenetic silencing of ineterneurons
+   - videoS1.py: &nbsp; predictive coding of sensory inputs
+   
+The module names correspond to figures in the paper. <br>
 
-The module names correspond to figurs in the paper. 
+To replicate results in the paper, use the pretrained results in ***results/*** (default) and run modules in ***figureGen/***
 
-2. Train a model yourself by running:
+
+The module names correspond to figures in the upcoming paper. 
+
+To train a model yourself, run:
 
 main.py
 
