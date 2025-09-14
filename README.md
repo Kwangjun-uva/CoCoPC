@@ -85,10 +85,9 @@ References:
 <br>
 <br>
 Once this work is published, I will provide a link. 
-All figures mentioned in the instruction below refer to those corresponding in the paper.
-For the time being, details of this paper can be found here:
+All figures mentioned in the instruction below refer to those corresponding in the paper:
 
-https://www.biorxiv.org/content/10.1101/2024.10.27.620494v1.abstract
+https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1013469
 
 The code consists of three directories:
 
@@ -117,7 +116,7 @@ The module names correspond to figures in the paper. <br>
 To replicate results in the paper, use the pretrained results in ***results/*** (default) and run modules in ***figureGen/***
 
 
-The module names correspond to figures in the upcoming paper. 
+The module names correspond to figures in the paper. 
 
 To train a model yourself, run:
 
